@@ -1,0 +1,38 @@
+name: Run Momentum Strategy Every 30 Minutes
+
+on:
+  schedule:
+    # Pre-market: 09:00 – 14:30 UTC (every 30 mins)
+    - cron: '*/30 9-14 * * 1-5'
+
+    # Regular + after-hours: 15:00 – 23:30 UTC (every 30 mins)
+    - cron: '*/30 15-23 * * 1-5'
+
+  workflow_dispatch:  # Optional manual run
+
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run strategy script
+        run: python momentum_strategy.py
+        env:
+          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
+          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
+          APCA_API_BASE_URL: ${{ secrets.APCA_API_BASE_URL }}
+          TICKERS: ${{ secrets.TICKERS }}
