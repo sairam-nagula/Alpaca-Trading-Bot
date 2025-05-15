@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from alpaca_trade_api.rest import REST, TimeFrame
+from pathlib import Path
  
 # Load .env file
 load_dotenv()
@@ -109,10 +110,38 @@ def run_strategy():
         if momentum > MOMENTUM_THRESHOLD and volume > avg_volume and position_qty == 0:
             qty = int(POSITION_SIZE / latest_close)
             place_order(symbol, "buy", qty)
- 
+            log_trade(symbol, "buy", momentum, volume, avg_volume, qty)
+
         elif momentum < 0 and position_qty > 0:
             place_order(symbol, "sell", int(position_qty))
- 
+            log_trade(symbol, "sell", momentum, volume, avg_volume, int(position_qty))
+
+        else:
+            log_trade(symbol, "skip", momentum, volume, avg_volume, 0)
+
+
+def log_trade(symbol, action, momentum, volume, avg_volume, qty):
+    log_path = Path("trade_log.xlsx")
+    timestamp = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")  # 12-hour format
+
+    log_entry = pd.DataFrame([{
+        "timestamp": timestamp,
+        "symbol": symbol,
+        "action": action,
+        "momentum": round(momentum, 2),
+        "volume": volume,
+        "avg_volume": int(avg_volume),
+        "qty": qty
+    }])
+
+    if log_path.exists():
+        existing_log = pd.read_excel(log_path)
+        updated_log = pd.concat([existing_log, log_entry], ignore_index=True)
+    else:
+        updated_log = log_entry
+
+    updated_log.to_excel(log_path, index=False)
+    
    
  
 if __name__ == "__main__":
