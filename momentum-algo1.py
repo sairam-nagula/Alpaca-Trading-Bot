@@ -29,9 +29,11 @@ def get_price_data(symbol):
     # Convert to RFC 3339 format without microseconds
     start_str = start.replace(microsecond=0).isoformat() + "Z"
     end_str = end.replace(microsecond=0).isoformat() + "Z"
+    print(symbol)
  
     try:
         barset = client.get_bars(symbol, TimeFrame.Minute, start=start_str, end=end_str).df
+        print(symbol)
         return barset
  
     except Exception as e:
