@@ -29,11 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Upload trade log
-        uses: actions/upload-artifact@v3
-        with:
-          name: trade-log
-          path: trade_log.xlsx
 
       - name: Run strategy script
         run: python momentum-algo1.py
@@ -42,3 +37,9 @@ jobs:
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
           APCA_API_BASE_URL: ${{ secrets.APCA_API_BASE_URL }}
           TICKERS: ${{ secrets.TICKERS }}
+
+      - name: Upload trade log
+        uses: actions/upload-artifact@v3
+        with:
+          name: trade-log
+          path: trade_log.xlsx
