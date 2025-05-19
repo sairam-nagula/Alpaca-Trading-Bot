@@ -24,7 +24,7 @@ MOMENTUM_THRESHOLD = 2.0  # in %
 POSITION_SIZE = 100  # dollars per tradee
  
 def get_price_data(symbol):
-    end = datetime.utcnow() - timedelta(minutes=15)
+    end = datetime.utcnow() 
     start = end - timedelta(minutes=30)
 
     start_str = start.replace(microsecond=0).isoformat() + "Z"
@@ -32,7 +32,7 @@ def get_price_data(symbol):
     print(symbol)
 
     try:
-        barset = client.get_bars(symbol, TimeFrame.Minute, start=start_str, end=end_str).df
+        barset = client.get_bars(symbol, TimeFrame.Minute, start=start_str, end=end_str, feed = "iex").df
         if barset.empty:
             print(f"No IEX data for {symbol}")
         return barset
