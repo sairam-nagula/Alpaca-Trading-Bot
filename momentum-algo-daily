@@ -18,16 +18,20 @@ POSITION_SIZE = 100  # Dollars per trade
 
 
 def get_daily_data(symbol, days=10):
-    end = datetime.now()
-    start = end - timedelta(days=days + 2)  # Fetch slightly more for safety
+    end = (datetime.utcnow() - timedelta(minutes=1500)).date().isoformat()
+    start = (datetime.utcnow() - timedelta(days=days + 2, minutes=15)).date().isoformat()
     try:
         df = client.get_bars(
-            symbol, TimeFrame.Day, start=start.isoformat(), end=end.isoformat()
+            symbol,
+            TimeFrame.Day,
+            start=start,
+            end=end
         ).df
         return df
     except Exception as e:
         print(f"Error getting data for {symbol}: {e}")
         return pd.DataFrame()
+
 
 
 def calculate_momentum(df):
@@ -73,7 +77,7 @@ def run_daily_strategy():
             and recent_volume > avg_volume
             and position_qty == 0
         ):
-            qty = int(POSITION_SIZE / recent_close)
+            qty = max(1, int(POSITION_SIZE / recent_close))
             place_order(symbol, "buy", qty)
         elif momentum < 0 and position_qty > 0:
             place_order(symbol, "sell", int(position_qty))

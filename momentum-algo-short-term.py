@@ -5,7 +5,6 @@ import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from alpaca_trade_api.rest import REST, TimeFrame
-from pathlib import Path
  
 # Load .env file
 load_dotenv()
