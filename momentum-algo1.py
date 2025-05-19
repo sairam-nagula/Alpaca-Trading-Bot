@@ -32,7 +32,7 @@ def get_price_data(symbol):
     print(symbol)
 
     try:
-        barset = client.get_bars(symbol, TimeFrame.Minute, start=start_str, end=end_str, feed='iex').df
+        barset = client.get_bars(symbol, TimeFrame.Minute, start=start_str, end=end_str).df
         if barset.empty:
             print(f"No IEX data for {symbol}")
         return barset
@@ -40,20 +40,6 @@ def get_price_data(symbol):
         print(f"Error fetching data for  {symbol}: {e}")
         return pd.DataFrame()
 
- 
-    # Convert to RFC 3339 format without microseconds
-    start_str = start.replace(microsecond=0).isoformat() + "Z"
-    end_str = end.replace(microsecond=0).isoformat() + "Z"
-    print(symbol)
- 
-    try:
-        barset = client.get_bars(symbol, TimeFrame.Minute, start=start_str, end=end_str).df
-        print(symbol)
-        return barset
- 
-    except Exception as e:
-        print(f"Error fetching data for  {symbol}: {e}")
-        return pd.DataFrame()
  
  
 def calculate_momentum(df):
