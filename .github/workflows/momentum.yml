@@ -2,11 +2,14 @@ name: Run Momentum Strategy Every 30 Minutes
 
 on:
   schedule:
-    # Pre-market: 09:00 – 14:30 UTC (every 30 mins)
-    - cron: '*/30 9-14 * * 1-5'
+    # Pre-market: 09:00–14:30 UTC (4:00 AM–9:30 AM ET)
+    - cron: '*/1 9-14 * * 1-5'
 
-    # Regular + after-hours: 15:00 – 23:30 UTC (every 30 mins)
-    - cron: '*/30 15-23 * * 1-5'
+    # Market hours: 14:30–21:00 UTC (9:30 AM–4:00 PM ET)
+    - cron: '*/1 15-21 * * 1-5'
+
+    # After-hours: 21:00–23:30 UTC (4:00 PM–7:30 PM ET)
+    - cron: '*/1 21-23 * * 1-5'
 
   workflow_dispatch:  # Optional manual run
 
@@ -30,7 +33,7 @@ jobs:
           pip install -r requirements.txt
 
 
-      - name: Run strategy script
+      - name: Run 1 min strategy script
         run: python momentum-algo-1min.py
         env:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
