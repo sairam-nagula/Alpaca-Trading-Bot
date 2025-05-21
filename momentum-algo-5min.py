@@ -24,17 +24,16 @@ data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 # Strategy parameters
 MOMENTUM_THRESHOLD = 0.15  # in %
 POSITION_SIZE = 600  # dollars per trade
-LOOKBACK_MINUTES = 2  # fetch 2 minutes of bars
-LOOKBACK_MINUTES_2 = 3
+HOLD_DURATION_MINUTES = 15
+STOP_LOSS_PCT = -2.0  # in %
 
-# In-memory tracking of last buy timestamps
-last_buy_time = {}
-
+SMA_FAST_WINDOW = 3
+SMA_SLOW_WINDOW = 6
+LOOKBACK_MINUTES = 15  # bar data range
 
 def get_price_data(symbol):
     end = datetime.utcnow()
     start = end - timedelta(minutes=LOOKBACK_MINUTES)
-    start_2 = end - timedelta(minutes=LOOKBACK_MINUTES_2)
 
     request_params = StockBarsRequest(
         symbol_or_symbols=[symbol],
@@ -43,27 +42,13 @@ def get_price_data(symbol):
         end=end,
         feed="iex",
     )
-    request_params2 = StockBarsRequest(
-        symbol_or_symbols=[symbol],
-        timeframe=TimeFrame.Minute,
-        start=start_2,
-        end=end,
-        feed="iex",
-    )
 
     try:
         bars = data_client.get_stock_bars(request_params).data[symbol]
-        bars2 = data_client.get_stock_bars(request_params2).data[symbol]
-
-        if not bars2:
-            print(f"No data returned for {symbol}")
-            return pd.DataFrame()
-
         if not bars:
             print(f"No data returned for {symbol}")
             return pd.DataFrame()
 
-        # Convert to DataFrame
         df = pd.DataFrame(
             [
                 {
@@ -79,38 +64,25 @@ def get_price_data(symbol):
                 for bar in bars
             ]
         )
-        df2 = pd.DataFrame(
-            [
-                {
-                    "timestamp": bar.timestamp.replace(tzinfo=pytz.utc).astimezone(
-                        pytz.timezone("America/New_York")
-                    ),
-                    "open": bar.open,
-                    "high": bar.high,
-                    "low": bar.low,
-                    "close": bar.close,
-                    "volume": bar.volume,
-                }
-                for bar in bars2
-            ]
-        )
-        return df, df2
+        return df
 
     except Exception as e:
         print(f"Error fetching data for {symbol}: {e}")
-        return pd.DataFrame(), pd.DataFrame()  
+        return pd.DataFrame()
 
 
-
-def calculate_momentum(df, df2):
+def calculate_sma_momentum(df):
     try:
-        latest_close = df["close"].iloc[-1]
-        earlier_close = df2["close"].iloc[0]
-        momentum = ((latest_close - earlier_close) / earlier_close) * 100
-        return momentum
+        df["sma_fast"] = df["close"].rolling(SMA_FAST_WINDOW).mean()
+        df["sma_slow"] = df["close"].rolling(SMA_SLOW_WINDOW).mean()
+        latest_fast = df["sma_fast"].iloc[-1]
+        latest_slow = df["sma_slow"].iloc[-1]
+
+        momentum = ((latest_fast - latest_slow) / latest_slow) * 100
+        return momentum, df["close"].iloc[-1], latest_fast, latest_slow
     except Exception as e:
-        print(f"Error calculating momentum: {e}")
-        return 0
+        print(f"Error calculating SMA momentum: {e}")
+        return 0, 0, 0, 0
 
 
 def get_position(symbol):
@@ -121,8 +93,31 @@ def get_position(symbol):
         return 0.0
 
 
+def get_entry_price(symbol):
+    try:
+        position = client.get_position(symbol)
+        return float(position.avg_entry_price)
+    except:
+        return None
+
+
+def get_last_buy_time(symbol):
+    try:
+        orders = client.list_orders(
+            status="filled",
+            limit=10,
+            direction="desc"
+        )
+        for order in orders:
+            if order.symbol == symbol and order.side == "buy":
+                return order.filled_at.replace(tzinfo=pytz.utc)
+    except Exception as e:
+        print(f"Error getting last buy time for {symbol}: {e}")
+    return None
+
+
 def place_order(symbol, side, qty):
-    print(f"Placing {side} order for {qty} shares of {symbol}")
+    print(f"Placing {side.upper()} order for {qty} shares of {symbol}")
     client.submit_order(
         symbol=symbol, qty=qty, side=side, type="market", time_in_force="gtc"
     )
@@ -133,31 +128,42 @@ def run_strategy():
 
     for symbol in TICKERS:
         print(f"\nChecking {symbol}...")
-        df, df2 = get_price_data(symbol)
-        if df.empty or df2.empty:
-            print(f"No data returned for {symbol}")
+        df = get_price_data(symbol)
+        if df.empty:
             continue
 
-        momentum = calculate_momentum(df, df2)
-        latest_close = df["close"].iloc[-1]
+        momentum, latest_close, sma_fast, sma_slow = calculate_sma_momentum(df)
         position_qty = get_position(symbol)
         timestamp = df["timestamp"].iloc[-1].strftime("%H:%M:%S")
 
         print(
-            f"Time: {timestamp} | Momentum: {momentum:.2f}% | Price: {latest_close:.2f} | Current Qty: {position_qty}"
+            f"Time: {timestamp} | Momentum: {momentum:.2f}% | Price: {latest_close:.2f} | Fast SMA: {sma_fast:.2f} | Slow SMA: {sma_slow:.2f} | Qty: {position_qty}"
         )
 
         # Buy condition
         if momentum > MOMENTUM_THRESHOLD and position_qty == 0:
             qty = int(POSITION_SIZE / latest_close)
             place_order(symbol, "buy", qty)
-            last_buy_time[symbol] = current_time
 
         # Sell condition
-        elif momentum <= 0 and position_qty > 0:
-            place_order(symbol, "sell", int(position_qty))
-            if symbol in last_buy_time:
-                del last_buy_time[symbol]
+        elif position_qty > 0:
+            entry_price = get_entry_price(symbol)
+            if entry_price:
+                change_pct = ((latest_close - entry_price) / entry_price) * 100
+
+                # Stop-loss check
+                if change_pct <= STOP_LOSS_PCT:
+                    print(f"{symbol}: Stop-loss triggered ({change_pct:.2f}%). Selling...")
+                    place_order(symbol, "sell", int(position_qty))
+                    continue
+
+            # Time-based sell condition
+            if sma_fast < sma_slow:
+                last_buy = get_last_buy_time(symbol)
+                if last_buy:
+                    elapsed = current_time - last_buy
+                    if elapsed >= timedelta(minutes=HOLD_DURATION_MINUTES):
+                        place_order(symbol, "sell", int(position_qty))
 
 
 if __name__ == "__main__":
