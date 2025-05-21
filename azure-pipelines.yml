@@ -1,37 +1,30 @@
-name: Run Momentum Strategy Every 1 Minute
+trigger: none
 
-on:
-  schedule:
+schedules:
+  - cron: "*/1 13-20 * * 1-5"  # Every 1 minute during 9 AM – 4:59 PM ET
+    displayName: "Every Minute - Market Hours ET"
+    branches:
+      include:
+        - main
+    always: true
 
-    # Market hours: 14:30–21:00 UTC (9:30 AM–4:00 PM ET)
-    - cron: '*/1 15-21 * * 1-5'
+pool:
+  vmImage: 'ubuntu-latest'
 
-  workflow_dispatch:  # Optional manual run
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.11'
 
+  - script: |
+      python -m pip install --upgrade pip
+      pip install -r requirements.txt
+    displayName: 'Install dependencies'
 
-jobs:
-  trade:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-
-      - name: Run 1 min strategy script
-        run: python momentum-algo-1min.py
-        env:
-          APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
-          APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
-          APCA_API_BASE_URL: ${{ secrets.APCA_API_BASE_URL }}
-          TICKERS: ${{ secrets.TICKERS }}
+  - script: python momentum-algo-1min.py
+    displayName: 'Run Momentum Strategy'
+    env:
+      APCA_API_KEY_ID: $(APCA_API_KEY_ID)
+      APCA_API_SECRET_KEY: $(APCA_API_SECRET_KEY)
+      APCA_API_BASE_URL: $(APCA_API_BASE_URL)
+      TICKERS: $(TICKERS)
