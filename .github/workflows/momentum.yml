@@ -31,7 +31,7 @@ jobs:
 
 
       - name: Run strategy script
-        run: python momentum-algo-short-term.py
+        run: python momentum-algo-1min.py
         env:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
