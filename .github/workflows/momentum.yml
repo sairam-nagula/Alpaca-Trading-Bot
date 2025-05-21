@@ -1,4 +1,4 @@
-name: Run Momentum Strategy Every 30 Minutes
+name: Run Momentum Strategy Every 1 Minute
 
 on:
   schedule:
