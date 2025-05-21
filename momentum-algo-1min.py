@@ -1,10 +1,12 @@
-
 import os
 import pandas as pd
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from alpaca_trade_api.rest import REST, TimeFrame
-from datetime import timezone
+import pytz
+from alpaca_trade_api.rest import REST
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import StockBarsRequest
+from alpaca.data.timeframe import TimeFrame
 
 # Load .env variables
 load_dotenv()
@@ -15,36 +17,101 @@ SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
 BASE_URL = os.getenv("APCA_API_BASE_URL")
 TICKERS = os.getenv("TICKERS", "").split(",")
 
-# Alpaca client
+# Alpaca clients
 client = REST(API_KEY, SECRET_KEY, BASE_URL)
+data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Strategy parameters
 MOMENTUM_THRESHOLD = 0.25  # in %
-POSITION_SIZE = 100        # dollars per trade
-LOOKBACK_MINUTES = 2       # fetch 2 minutes of bars
-COOLDOWN_MINUTES = 5       # wait time between buys per ticker
+POSITION_SIZE = 100  # dollars per trade
+LOOKBACK_MINUTES = 2  # fetch 2 minutes of bars
+COOLDOWN_MINUTES = 5  # wait time between buys per ticker
 
 # In-memory tracking of last buy timestamps
 last_buy_time = {}
 
+
 def get_price_data(symbol):
-    end = datetime.now(timezone.utc)
+    end = datetime.utcnow()
     start = end - timedelta(minutes=LOOKBACK_MINUTES)
+    start_2 = end - timedelta(minutes=COOLDOWN_MINUTES)
+
+    request_params = StockBarsRequest(
+        symbol_or_symbols=[symbol],
+        timeframe=TimeFrame.Minute,
+        start=start,
+        end=end,
+        feed="iex",
+    )
+    request_params2 = StockBarsRequest(
+        symbol_or_symbols=[symbol],
+        timeframe=TimeFrame.Minute,
+        start=start_2,
+        end=end,
+        feed="iex",
+    )
 
     try:
-        barset = client.get_bars(symbol, TimeFrame.Minute, limit=2, feed="iex").df
+        bars = data_client.get_stock_bars(request_params).data[symbol]
+        bars2 = data_client.get_stock_bars(request_params2).data[symbol]
 
-        if barset.empty:
-            print(f"No data for {symbol}")
-        return barset
+        if not bars2:
+            print(f"No data returned for {symbol}")
+            return pd.DataFrame()
+
+        if not bars:
+            print(f"No data returned for {symbol}")
+            return pd.DataFrame()
+
+        # Convert to DataFrame
+        df = pd.DataFrame(
+            [
+                {
+                    "timestamp": bar.timestamp.replace(tzinfo=pytz.utc).astimezone(
+                        pytz.timezone("America/New_York")
+                    ),
+                    "open": bar.open,
+                    "high": bar.high,
+                    "low": bar.low,
+                    "close": bar.close,
+                    "volume": bar.volume,
+                }
+                for bar in bars
+            ]
+        )
+        df2 = pd.DataFrame(
+            [
+                {
+                    "timestamp": bar.timestamp.replace(tzinfo=pytz.utc).astimezone(
+                        pytz.timezone("America/New_York")
+                    ),
+                    "open": bar.open,
+                    "high": bar.high,
+                    "low": bar.low,
+                    "close": bar.close,
+                    "volume": bar.volume,
+                }
+                for bar in bars2
+            ]
+        )
+        return df, df2
+
     except Exception as e:
         print(f"Error fetching data for {symbol}: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame()  
 
-def calculate_momentum(df):
-    if len(df) < 2:
+
+
+def calculate_momentum(df, df2):
+    try:
+        latest_close = df["close"].iloc[-1]
+        earlier_close = df2["close"].iloc[0]
+        momentum = ((latest_close - earlier_close) / earlier_close) * 100
+        return momentum
+    except Exception as e:
+        print(f"Error calculating momentum: {e}")
         return 0
-    return ((df['close'].iloc[-1] - df['close'].iloc[0]) / df['close'].iloc[0]) * 100
+
 
 def get_position(symbol):
     try:
@@ -53,37 +120,40 @@ def get_position(symbol):
     except:
         return 0.0
 
+
 def place_order(symbol, side, qty):
     print(f"Placing {side} order for {qty} shares of {symbol}")
     client.submit_order(
-        symbol=symbol,
-        qty=qty,
-        side=side,
-        type="market",
-        time_in_force="gtc"
+        symbol=symbol, qty=qty, side=side, type="market", time_in_force="gtc"
     )
 
-def run_strategy():
-    current_time = datetime.now(timezone.utc)
 
+def run_strategy():
+    current_time = datetime.now(pytz.utc)
 
     for symbol in TICKERS:
         print(f"\nChecking {symbol}...")
-        df = get_price_data(symbol)
-        if df.empty or len(df) < 2:
+        df, df2 = get_price_data(symbol)
+        if df.empty or df2.empty:
+            print(f"No data returned for {symbol}")
             continue
 
-        momentum = calculate_momentum(df)
-        latest_close = df['close'].iloc[-1]
+        momentum = calculate_momentum(df, df2)
+        latest_close = df["close"].iloc[-1]
         position_qty = get_position(symbol)
+        timestamp = df["timestamp"].iloc[-1].strftime("%H:%M:%S")
 
-        print(f"Momentum: {momentum:.2f}% | Price: {latest_close:.2f} | Current Qty: {position_qty}")
+        print(
+            f"Time: {timestamp} | Momentum: {momentum:.2f}% | Price: {latest_close:.2f} | Current Qty: {position_qty}"
+        )
 
-        # Check cooldown
+        # Cooldown check
         if symbol in last_buy_time:
             elapsed = (current_time - last_buy_time[symbol]).total_seconds() / 60
             if elapsed < COOLDOWN_MINUTES:
-                print(f"Cooldown active for {symbol} ({elapsed:.1f} mins since last buy)")
+                print(
+                    f"Cooldown active for {symbol} ({elapsed:.1f} mins since last buy)"
+                )
                 continue
 
         # Buy condition
@@ -97,6 +167,7 @@ def run_strategy():
             place_order(symbol, "sell", int(position_qty))
             if symbol in last_buy_time:
                 del last_buy_time[symbol]
+
 
 if __name__ == "__main__":
     run_strategy()
