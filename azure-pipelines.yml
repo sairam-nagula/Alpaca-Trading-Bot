@@ -1,7 +1,7 @@
 trigger: none
 
 schedules:
-  - cron: "*/1 13-20 * * 1-5"  # Every 1 minute during 9 AM – 4:59 PM ET
+  - cron: "*/5 13-20 * * 1-5"  # Every 1 minute during 9 AM – 4:59 PM ET
     displayName: "Every Minute - Market Hours ET"
     branches:
       include:
