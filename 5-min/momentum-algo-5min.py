@@ -25,10 +25,10 @@ data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 MOMENTUM_THRESHOLD = 0.15  # in %
 POSITION_SIZE = 1000  # dollars per trade
 HOLD_DURATION_MINUTES = 15
-STOP_LOSS_PCT = -2.0  # in %
+STOP_LOSS_PCT = -1.0  # in %
 
-SMA_FAST_WINDOW = 3
-SMA_SLOW_WINDOW = 6
+SMA_FAST_WINDOW = 8
+SMA_SLOW_WINDOW = 18
 LOOKBACK_MINUTES = 15  # bar data range
 
 def get_price_data(symbol):
