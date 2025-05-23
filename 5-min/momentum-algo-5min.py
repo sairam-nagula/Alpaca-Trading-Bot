@@ -29,7 +29,7 @@ STOP_LOSS_PCT = -1.0  # in %
 
 SMA_FAST_WINDOW = 8
 SMA_SLOW_WINDOW = 18
-LOOKBACK_MINUTES = 15  # bar data range
+LOOKBACK_MINUTES = 20  # bar data range
 
 def get_price_data(symbol):
     end = datetime.utcnow()
