@@ -18,21 +18,20 @@ TICKERS = os.getenv("TICKERS", "").split(",")
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Strategy Parameters
-MOMENTUM_THRESHOLD = 0.8            # Lower threshold to catch more early moves
-POSITION_SIZE = 1000              # Stick with your current capital per trade
-HOLD_DURATION_MINUTES = 30         # Shorter hold gives better rotation and control
-STOP_LOSS_PCT = -0.01              # Slightly looser stop to tolerate noise
-TAKE_PROFIT_PCT = 3.5             # Realistic profit target for intraday swings
-SMA_FAST_WINDOW = 10               # A bit smoother fast signal than 5
-SMA_SLOW_WINDOW = 20              # A multiple of the fast window helps stability
-LOOKBACK_MINUTES = 20             # Gives both SMAs enough bars to stabilize
-
+STARTING_CASH = 10000
+MOMENTUM_THRESHOLD = 0.4
+POSITION_SIZE = 1000
+HOLD_DURATION_MINUTES = 20
+STOP_LOSS_PCT = -0.01
+TAKE_PROFIT_PCT = 3.5
+SMA_FAST_WINDOW = 8
+SMA_SLOW_WINDOW = 20
+LOOKBACK_MINUTES = 20
 
 START_DATE = datetime(2025, 4, 15, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 4, 16, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 5, 18, tzinfo=pytz.UTC)
 
 # Globals
-starting_cash = 10000
 final_portfolios = []
 
 def plot_portfolio(timestamps, portfolio_values, symbol):
@@ -69,10 +68,14 @@ def backtest_sma_strategy(symbol):
         "close": bar.close
     } for bar in bars]).set_index("timestamp")
 
-    cash = starting_cash
+    cash = STARTING_CASH
     position_qty = 0
     entry_price = None
     last_buy_time = None
+    cooldown_minutes = 10
+    next_entry_allowed = df.index[0]  # Initial value
+    trade_count = 0
+    MAX_TRADES_PER_DAY = 3
 
     portfolio_values = []
     timestamps = []
@@ -83,20 +86,28 @@ def backtest_sma_strategy(symbol):
         now = df.index[i]
         price = df.iloc[i]["close"]
 
+        if now < next_entry_allowed:
+            portfolio_values.append(cash + position_qty * price)
+            timestamps.append(now)
+            continue
+
         window["sma_fast"] = window["close"].rolling(SMA_FAST_WINDOW).mean()
         window["sma_slow"] = window["close"].rolling(SMA_SLOW_WINDOW).mean()
 
         sma_fast = window["sma_fast"].iloc[-1]
         sma_slow = window["sma_slow"].iloc[-1]
         momentum = ((sma_fast - sma_slow) / sma_slow) * 100 if sma_slow else 0
+        recent_high = df["close"].iloc[i - LOOKBACK_MINUTES:i].max()
 
-        if momentum > MOMENTUM_THRESHOLD and position_qty == 0:
+        if momentum > MOMENTUM_THRESHOLD and price > recent_high and position_qty == 0 and trade_count < MAX_TRADES_PER_DAY:
             qty = int(POSITION_SIZE / price)
             if qty > 0:
                 position_qty = qty
                 cash -= qty * price
                 entry_price = price
                 last_buy_time = now
+                next_entry_allowed = now + timedelta(minutes=cooldown_minutes)
+                trade_count += 1
                 trades.append((now, "BUY", price, qty))
 
         elif position_qty > 0:
@@ -109,6 +120,7 @@ def backtest_sma_strategy(symbol):
                 position_qty = 0
                 entry_price = None
                 last_buy_time = None
+                next_entry_allowed = now + timedelta(minutes=cooldown_minutes)
 
             elif change_pct >= TAKE_PROFIT_PCT:
                 cash += position_qty * price
@@ -116,6 +128,7 @@ def backtest_sma_strategy(symbol):
                 position_qty = 0
                 entry_price = None
                 last_buy_time = None
+                next_entry_allowed = now + timedelta(minutes=cooldown_minutes)
 
             elif sma_fast < sma_slow and held_time >= timedelta(minutes=HOLD_DURATION_MINUTES):
                 cash += position_qty * price
@@ -123,6 +136,7 @@ def backtest_sma_strategy(symbol):
                 position_qty = 0
                 entry_price = None
                 last_buy_time = None
+                next_entry_allowed = now + timedelta(minutes=cooldown_minutes)
 
         portfolio_values.append(cash + position_qty * price)
         timestamps.append(now)
@@ -143,10 +157,9 @@ for ticker in TICKERS:
 
 # Final summary
 total_final_value = sum(final_portfolios)
-total_invested = starting_cash * len(final_portfolios)
+total_invested = STARTING_CASH * len(final_portfolios)
 total_profit = total_final_value - total_invested
 total_pct_change = (total_profit / total_invested) * 100
-
 
 print("\n--- Total P&L Summary ---")
 print(f"Total Final Value: ${total_final_value:,.2f}")
