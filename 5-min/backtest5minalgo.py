@@ -22,14 +22,15 @@ STARTING_CASH = 10000
 MOMENTUM_THRESHOLD = 0.4
 POSITION_SIZE = 1000
 HOLD_DURATION_MINUTES = 20
-STOP_LOSS_PCT = -0.01
 TAKE_PROFIT_PCT = 3.5
 SMA_FAST_WINDOW = 8
 SMA_SLOW_WINDOW = 20
 LOOKBACK_MINUTES = 20
+ATR_WINDOW = 14
+ATR_MULTIPLIER = 1.5  # For dynamic stop loss
 
-START_DATE = datetime(2025, 4, 15, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 5, 18, tzinfo=pytz.UTC)
+START_DATE = datetime(2025, 3, 1, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 4, 24, tzinfo=pytz.UTC)
 
 # Globals
 final_portfolios = []
@@ -63,17 +64,17 @@ def backtest_sma_strategy(symbol):
         print(f"No data for {symbol}")
         return
 
-    df = pd.DataFrame([{
-        "timestamp": bar.timestamp.replace(tzinfo=pytz.UTC),
-        "close": bar.close
-    } for bar in bars]).set_index("timestamp")
+    df = pd.DataFrame([{ "timestamp": bar.timestamp.replace(tzinfo=pytz.UTC), "close": bar.close } for bar in bars]).set_index("timestamp")
+    df["tr"] = df["close"].diff().abs()
+    df["atr"] = df["tr"].rolling(window=ATR_WINDOW).mean()
 
     cash = STARTING_CASH
     position_qty = 0
     entry_price = None
+    entry_atr = None
     last_buy_time = None
     cooldown_minutes = 10
-    next_entry_allowed = df.index[0]  # Initial value
+    next_entry_allowed = df.index[0]
     trade_count = 0
     MAX_TRADES_PER_DAY = 3
 
@@ -96,6 +97,7 @@ def backtest_sma_strategy(symbol):
 
         sma_fast = window["sma_fast"].iloc[-1]
         sma_slow = window["sma_slow"].iloc[-1]
+        atr = df["atr"].iloc[i]
         momentum = ((sma_fast - sma_slow) / sma_slow) * 100 if sma_slow else 0
         recent_high = df["close"].iloc[i - LOOKBACK_MINUTES:i].max()
 
@@ -103,9 +105,10 @@ def backtest_sma_strategy(symbol):
             qty = int(POSITION_SIZE / price)
             if qty > 0:
                 position_qty = qty
-                cash -= qty * price
                 entry_price = price
+                entry_atr = atr
                 last_buy_time = now
+                cash -= qty * price
                 next_entry_allowed = now + timedelta(minutes=cooldown_minutes)
                 trade_count += 1
                 trades.append((now, "BUY", price, qty))
@@ -113,10 +116,11 @@ def backtest_sma_strategy(symbol):
         elif position_qty > 0:
             change_pct = ((price - entry_price) / entry_price) * 100
             held_time = now - last_buy_time if last_buy_time else timedelta(0)
+            dynamic_stop_loss_pct = -ATR_MULTIPLIER * entry_atr / entry_price * 100
 
-            if change_pct <= STOP_LOSS_PCT:
+            if change_pct <= dynamic_stop_loss_pct:
                 cash += position_qty * price
-                trades.append((now, "STOP-LOSS SELL", price, position_qty))
+                trades.append((now, "DYNAMIC STOP SELL", price, position_qty))
                 position_qty = 0
                 entry_price = None
                 last_buy_time = None
