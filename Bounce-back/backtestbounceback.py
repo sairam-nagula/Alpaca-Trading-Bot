@@ -1,34 +1,33 @@
 import os
 import pandas as pd
-import matplotlib.pyplot as plt
+import numpy as np
 from datetime import datetime, timedelta
 import pytz
 from dotenv import load_dotenv
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+import matplotlib.pyplot as plt
 
-# Load API keys and environment variables
+# Load credentials
 load_dotenv()
 API_KEY = os.getenv("APCA_API_KEY_ID")
 SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
 TICKERS = [ticker.strip() for ticker in os.getenv("TICKERS", "").split(",") if ticker.strip()]
 
-# Alpaca client
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
-# Strategy parameters
+# Parameters
 STARTING_CASH = 10000
-POSITION_SIZE = 600
+POSITION_SIZE = 9000
 DROP_PCT = 4.0
-TAKE_PROFIT_PCT = 3.0  # reduced for higher win rate
-STOP_LOSS_PCT = -1.0
+TAKE_PROFIT_PCT = 4.0
+STOP_LOSS_PCT = -0.5
 HOLD_HOURS_MAX = 72
-DROP_LOOKBACK_BARS = 60  # reduced for quicker entry
+DROP_LOOKBACK_BARS = 60
 
-# Backtest settings
-START_DATE = datetime(2025, 4, 1, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 5, 1, tzinfo=pytz.UTC)  # Shorter range for minute data
+START_DATE = datetime(2025, 5, 2, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 5, 24, tzinfo=pytz.UTC)
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
@@ -48,7 +47,7 @@ def run_backtest(prices):
     for i in range(DROP_LOOKBACK_BARS, len(prices)):
         now = prices.iloc[i]
         now_time = now.name
-        current_price = now["low"]  # use low for entry precision
+        current_price = now["open"]
 
         if position:
             entry_price = position["entry_price"]
@@ -72,8 +71,8 @@ def run_backtest(prices):
             max_close = window["close"].max()
             drop_pct = (current_price - max_close) / max_close * 100
 
-            sma_30 = prices["close"].rolling(30).mean().iloc[i]
-            trend_ok = now["close"] > sma_30
+            sma10 = prices["close"].rolling(10).mean().iloc[i]
+            trend_ok = now["close"] > sma10
 
             if drop_pct <= -DROP_PCT and trend_ok:
                 shares_to_buy = POSITION_SIZE / current_price
@@ -90,21 +89,38 @@ def plot_trades(prices, trades, ticker):
     plt.figure(figsize=(14, 6))
     plt.plot(prices.index, prices["close"], label="Price", alpha=0.8)
 
-    for trade in trades:
-        plt.scatter(trade["buy_time"], trade["buy_price"], marker="^", color="green", label="Buy", zorder=5)
-        plt.scatter(trade["sell_time"], trade["sell_price"], marker="v", color="red", label="Sell", zorder=5)
+    for i, trade in enumerate(trades):
+        plt.scatter(trade["buy_time"], trade["buy_price"], marker="^", color="green", label="Buy" if i == 0 else "", zorder=5)
+        plt.scatter(trade["sell_time"], trade["sell_price"], marker="v", color="red", label="Sell" if i == 0 else "", zorder=5)
 
-    plt.title(f"{ticker} Backtest — Buy -{DROP_PCT}%, Sell +{TAKE_PROFIT_PCT}%")
+    # Compute additional info
+    returns = [t["return_pct"] for t in trades]
+    total_return = sum(returns)
+    win_count = sum(r > 0 for r in returns)
+    win_rate = (win_count / len(returns) * 100) if trades else 0
+    avg_return = np.mean(returns) if trades else 0
+
+    # Add dynamic subtitle text
+    subtitle = (
+        f"Total Trades: {len(trades)} | "
+        f"Win Rate: {win_rate:.1f}% | "
+        f"Avg Return: {avg_return:.2f}% | "
+        f"Total Return: {total_return:.2f}%"
+    )
+
+    plt.title(f"{ticker} Backtest — Buy -{DROP_PCT}%, Sell +{TAKE_PROFIT_PCT}%\n{subtitle}", fontsize=13)
     plt.xlabel("Datetime")
     plt.ylabel("Price")
     plt.grid(True)
-    plt.legend(["Price", "Buy", "Sell"])
+    plt.legend()
     plt.tight_layout()
     plt.show()
 
+
 if __name__ == "__main__":
     all_trades = []
-    combined_final_value = STARTING_CASH
+    combined_final_value = 0
+    
 
     for TICKER in TICKERS:
         print(f"\n=== Running Backtest for {TICKER} ===")
@@ -115,7 +131,7 @@ if __name__ == "__main__":
                 continue
 
             cash, trades = run_backtest(prices)
-            combined_final_value += cash - STARTING_CASH
+            combined_final_value += cash
             all_trades.extend(trades)
 
             print(f"\n--- Backtest Result for {TICKER} ---")
@@ -126,23 +142,32 @@ if __name__ == "__main__":
                       f"{trade['sell_time']} SELL @ ${trade['sell_price']:.2f} | "
                       f"Return: {trade['return_pct']:.2f}%")
 
-            # plot_trades(prices, trades, TICKER)  # Optional visualization
+            # plot_trades(prices, trades, TICKER)
 
         except Exception as e:
             print(f"Error while processing {TICKER}: {e}")
 
     print("\n=== TOTAL STRATEGY SUMMARY ===")
     total_trades = len(all_trades)
+    duration_days = (END_DATE - START_DATE).days
+    duration_months = duration_days / 30.0  # Approximate
+
     if total_trades > 0:
-        total_return_pct = sum([t['return_pct'] for t in all_trades])
-        avg_return = total_return_pct / total_trades
-        wins = sum([1 for t in all_trades if t['return_pct'] > 0])
-        win_rate = (wins / total_trades) * 100
+        returns = [t["return_pct"] for t in all_trades]
+        avg_return = np.mean(returns)
+        win_rate = sum(r > 0 for r in returns) / total_trades * 100
+        sharpe = avg_return / np.std(returns) if np.std(returns) != 0 else 0
+
+        starting_total = STARTING_CASH * len(TICKERS)
+        total_return_pct = ((combined_final_value - starting_total) / starting_total) * 100
 
         print(f"Total Trades: {total_trades}")
         print(f"Average Return per Trade: {avg_return:.2f}%")
-        print(f"Winning Trades: {wins} / {total_trades} ({win_rate:.2f}%)")
-        print(f"Final Portfolio Value (All Tickers): ${combined_final_value:.2f}")
-        print(f"Total Strategy P&L: ${combined_final_value - STARTING_CASH:.2f}")
+        print(f"Win Rate: {win_rate:.2f}%")
+        print(f"Sharpe Ratio: {sharpe:.2f}")
+        print(f"Backtest Duration: {duration_days} days ({duration_months:.1f} months)")
+        print(f"Total Return: {total_return_pct:.2f}%")
+        print(f"Final Portfolio Value: ${combined_final_value:.2f}")
+        print(f"Total Strategy P&L: ${combined_final_value - starting_total:.2f}")
     else:
         print("No trades were executed.")
