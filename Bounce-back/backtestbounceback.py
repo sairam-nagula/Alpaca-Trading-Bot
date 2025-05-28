@@ -18,16 +18,16 @@ TICKERS = [ticker.strip() for ticker in os.getenv("TICKERS", "").split(",") if t
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Parameters
-STARTING_CASH = 10000
-POSITION_SIZE = 9000
+STARTING_CASH = 1000
+POSITION_SIZE = 900
 DROP_PCT = 4.0
 TAKE_PROFIT_PCT = 4.0
 STOP_LOSS_PCT = -0.5
 HOLD_HOURS_MAX = 72
 DROP_LOOKBACK_BARS = 60
 
-START_DATE = datetime(2025, 5, 2, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 5, 24, tzinfo=pytz.UTC)
+START_DATE = datetime(2024, 12, 1, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 1, 30, tzinfo=pytz.UTC)
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
@@ -66,22 +66,35 @@ def run_backtest(prices):
                 })
                 position = None
 
-        elif not position:
+        else:
             window = prices.iloc[i - DROP_LOOKBACK_BARS:i]
             max_close = window["close"].max()
             drop_pct = (current_price - max_close) / max_close * 100
-
-            sma10 = prices["close"].rolling(10).mean().iloc[i]
+            sma10 = prices["close"].rolling(10).mean().iloc[i-1]
             trend_ok = now["close"] > sma10
 
             if drop_pct <= -DROP_PCT and trend_ok:
                 shares_to_buy = POSITION_SIZE / current_price
-                cash -= shares_to_buy * current_price
-                position = {
-                    "entry_time": now_time,
-                    "entry_price": current_price,
-                    "shares": shares_to_buy
-                }
+                if cash >= shares_to_buy * current_price:
+                    cash -= shares_to_buy * current_price
+                    position = {
+                        "entry_time": now_time,
+                        "entry_price": current_price,
+                        "shares": shares_to_buy
+                    }
+
+    # Close any open position at the final price
+    if position:
+        final_price = prices.iloc[-1]["close"]
+        shares = position["shares"]
+        cash += shares * final_price
+        trades.append({
+            "buy_time": position["entry_time"],
+            "buy_price": position["entry_price"],
+            "sell_time": prices.iloc[-1].name,
+            "sell_price": final_price,
+            "return_pct": (final_price - position["entry_price"]) / position["entry_price"] * 100
+        })
 
     return cash, trades
 
