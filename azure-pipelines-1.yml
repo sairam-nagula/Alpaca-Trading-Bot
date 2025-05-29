@@ -1,0 +1,27 @@
+trigger: none
+
+schedules:
+  - cron: "*/5 13-20 * * 1-5"  # Every 5 minutes from 9 AM to 4:59 PM ET
+    displayName: "Every 5 Minutes - Market Hours ET"
+    branches:
+      include:
+        - main
+    always: true
+
+pool:
+  name: alpaca-agent
+
+steps:
+  - script: |
+      python3 -m pip install --upgrade pip
+      pip3 install -r /home/azureuser/alpaca-bot/requirements.txt
+    displayName: 'Install dependencies'
+
+  - script: |
+      python3 /home/azureuser/alpaca-bot/momentum-algo-1min.py
+    displayName: 'Run Momentum Strategy'
+    env:
+      APCA_API_KEY_ID: $(APCA_API_KEY_ID)
+      APCA_API_SECRET_KEY: $(APCA_API_SECRET_KEY)
+      APCA_API_BASE_URL: $(APCA_API_BASE_URL)
+      TICKERS: $(TICKERS)
