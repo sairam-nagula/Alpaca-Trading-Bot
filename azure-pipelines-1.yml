@@ -12,13 +12,15 @@ pool:
   name: alpaca-agent
 
 steps:
+  - checkout: self  # This pulls your GitHub repo code into the pipeline agent workspace
+
   - script: |
       python3 -m pip install --upgrade pip
       pip3 install -r alpaca-bot/requirements.txt
     displayName: 'Install dependencies'
 
   - script: |
-      python3 /home/azureuser/alpaca-bot/momentum-algo-1min.py
+      python3 alpaca-bot/momentum-algo-1min.py
     displayName: 'Run Momentum Strategy'
     env:
       APCA_API_KEY_ID: $(APCA_API_KEY_ID)
