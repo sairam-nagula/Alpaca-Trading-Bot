@@ -14,7 +14,7 @@ pool:
 steps:
   - script: |
       python3 -m pip install --upgrade pip
-      pip3 install -r /home/azureuser/alpaca-bot/requirements.txt
+      pip3 install -r alpaca-bot/requirements.txt
     displayName: 'Install dependencies'
 
   - script: |
