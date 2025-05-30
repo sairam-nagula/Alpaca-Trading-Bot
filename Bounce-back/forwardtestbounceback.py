@@ -54,14 +54,30 @@ def fetch_recent_data(symbol, start, end):
         return None
     return bars.xs(symbol, level=0)
 
-def fetch_previous_day_close_data(symbol):
-    today = datetime.now(pytz.UTC).date()
-    prev_day = today - timedelta(days=1)
-    start = datetime.combine(prev_day, datetime.min.time(), tzinfo=pytz.UTC) + timedelta(hours=19, minutes=30)  # 3:30 PM ET
-    end = datetime.combine(prev_day, datetime.min.time(), tzinfo=pytz.UTC) + timedelta(hours=20)  # 4:00 PM ET
 
-    print(f"[INFO] Fetching previous close data for {symbol} ({start.time()} - {end.time()} UTC)")
-    return fetch_recent_data(symbol, start, end)
+def fetch_previous_day_close_data(symbol):
+    utc_now = datetime.now(pytz.UTC)
+    days_back = 1
+
+    while True:
+        prev_day = (utc_now - timedelta(days=days_back)).date()
+        start = datetime.combine(prev_day, datetime.min.time(), tzinfo=pytz.UTC) + timedelta(hours=19)  # 3:00 PM ET
+        end = datetime.combine(prev_day, datetime.min.time(), tzinfo=pytz.UTC) + timedelta(hours=20)   # 4:00 PM ET
+
+        print(f"[INFO] Attempting previous close data for {symbol} from {start.strftime('%A %Y-%m-%d')}")
+
+        bars = fetch_recent_data(symbol, start, end)
+        if bars is not None and not bars.empty:
+            return bars
+
+        # Go back one more day (weekend/holiday)
+        days_back += 1
+
+        # Safety limit: don't go back more than 5 days
+        if days_back > 5:
+            print(f"[WARN] Could not find valid previous close data for {symbol} in last 5 days.")
+            return None
+
 
 def evaluate_sell_condition(current_price, now_time, entry_time, entry_price):
     held_hours = (now_time - entry_time).total_seconds() / 3600
@@ -183,13 +199,24 @@ if __name__ == "__main__":
         try:
             prices = fetch_recent_data(ticker, start_time, utc_now)
             if prices is None or len(prices) < DROP_LOOKBACK_BARS:
-                prev_close = fetch_previous_day_close_data(ticker)
-                if prev_close is not None and not prev_close.empty:
-                    prices = pd.concat([prev_close, prices]) if prices is not None else prev_close
-                    print(f"[INFO] Augmented {ticker} with previous close data")
+                now_et = datetime.now(eastern)
+
+                if now_et.hour < 10 or (now_et.hour == 10 and now_et.minute <= 30):
+                    prev_close = fetch_previous_day_close_data(ticker)
+                    if prev_close is not None and not prev_close.empty:
+                        prices = pd.concat([prev_close, prices]) if prices is not None else prev_close
+                        print(f"[INFO] Augmented {ticker} with previous close data (pre-10:30 AM)")
+                    else:
+                        print(f"[SKIP] {ticker} has insufficient data and no previous close to backfill")
+                        continue
                 else:
-                    print(f"[SKIP] {ticker} has insufficient data and no previous close to backfill")
-                    continue
+                    print(f"[WARN] Missing/incomplete data for {ticker} after 10:30 AM. Retrying fetch...")
+                    prices = fetch_recent_data(ticker, start_time, utc_now)  # one retry
+
+                    if prices is None or len(prices) < DROP_LOOKBACK_BARS:
+                        print(f"[SKIP] {ticker} still missing data after retry. Skipping.")
+                        continue
+
 
             active_position = open_positions.get(ticker)
             process_ticker(ticker, prices, active_position, position_log)
