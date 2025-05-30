@@ -13,6 +13,10 @@ pool:
 
 steps:
   - checkout: self  # This pulls your GitHub repo code into the pipeline agent workspace
+  - script: |
+      sudo apt update
+      sudo apt install -y python3-pip
+    displayName: 'Install pip3'
 
   - script: |
       python3 -m pip install --upgrade pip
