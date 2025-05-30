@@ -1,8 +1,8 @@
 import os
-import pandas as pd
-import numpy as np
+import json
 from datetime import datetime, timedelta
 import pytz
+import pandas as pd
 from dotenv import load_dotenv
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
@@ -11,89 +11,190 @@ from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 
-# Load credentials
-load_dotenv()
-API_KEY = os.getenv("APCA_API_KEY_ID")
-SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
-TICKERS = [ticker.strip() for ticker in os.getenv("TICKERS", "").split(",") if ticker.strip()]
-
-trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
-data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
-
-# Strategy parameters
+# === STRATEGY PARAMETERS ===
 POSITION_SIZE = 900
 DROP_PCT = 4.0
 TAKE_PROFIT_PCT = 4.0
 STOP_LOSS_PCT = -0.5
 HOLD_HOURS_MAX = 72
 DROP_LOOKBACK_BARS = 60
+POSITION_LOG_FILE = "Bounce-back/position_log.json"
 
-UTC_NOW = datetime.now(pytz.UTC)
-START_TIME = UTC_NOW - timedelta(minutes=DROP_LOOKBACK_BARS + 2)  # small buffer
+# === SETUP ===
+load_dotenv()
+API_KEY = os.getenv("APCA_API_KEY_ID")
+SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
+TICKERS = [t.strip() for t in os.getenv("TICKERS", "").split(",") if t.strip()]
 
-positions = {}
+trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
+data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
-for ticker in TICKERS:
-    try:
-        request = StockBarsRequest(
-            symbol_or_symbols=ticker,
-            timeframe=TimeFrame.Minute,
-            start=START_TIME,
-            end=UTC_NOW,
-            feed = "iex"
-        )
-        df = data_client.get_stock_bars(request).df
-        if df.empty:
-            print(f"No recent data for {ticker}.")
-            continue
+eastern = pytz.timezone("US/Eastern")
 
-        prices = df.xs(ticker, level=0)
-        now = prices.iloc[-1]
-        now_time = now.name
-        current_price = now["open"]
+def load_position_log():
+    if os.path.exists(POSITION_LOG_FILE):
+        with open(POSITION_LOG_FILE, "r") as f:
+            return json.load(f)
+    return {}
 
-        # Check if already in a position
-        account_positions = trading_client.get_all_positions()
-        active_position = next((p for p in account_positions if p.symbol == ticker), None)
+def save_position_log(log):
+    with open(POSITION_LOG_FILE, "w") as f:
+        json.dump(log, f, indent=2)
 
-        # SELL CHECK
-        if active_position:
-            entry_price = float(active_position.avg_entry_price)
-            qty = float(active_position.qty)
-            time_held = (now_time - datetime.strptime(active_position.asset_class_updated_at, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=pytz.UTC)).total_seconds() / 3600
-            return_pct = (current_price - entry_price) / entry_price * 100
+def fetch_recent_data(symbol, start, end):
+    request = StockBarsRequest(
+        symbol_or_symbols=symbol,
+        timeframe=TimeFrame.Minute,
+        start=start,
+        end=end,
+        feed="iex"
+    )
+    bars = data_client.get_stock_bars(request).df
+    if bars.empty or symbol not in bars.index.get_level_values(0):
+        return None
+    return bars.xs(symbol, level=0)
 
-            if return_pct >= TAKE_PROFIT_PCT or return_pct <= STOP_LOSS_PCT or time_held >= HOLD_HOURS_MAX:
+def fetch_previous_day_close_data(symbol):
+    today = datetime.now(pytz.UTC).date()
+    prev_day = today - timedelta(days=1)
+    start = datetime.combine(prev_day, datetime.min.time(), tzinfo=pytz.UTC) + timedelta(hours=19, minutes=30)  # 3:30 PM ET
+    end = datetime.combine(prev_day, datetime.min.time(), tzinfo=pytz.UTC) + timedelta(hours=20)  # 4:00 PM ET
+
+    print(f"[INFO] Fetching previous close data for {symbol} ({start.time()} - {end.time()} UTC)")
+    return fetch_recent_data(symbol, start, end)
+
+def evaluate_sell_condition(current_price, now_time, entry_time, entry_price):
+    held_hours = (now_time - entry_time).total_seconds() / 3600
+    return_pct = (current_price - entry_price) / entry_price * 100
+    should_sell = (
+        return_pct >= TAKE_PROFIT_PCT or 
+        return_pct <= STOP_LOSS_PCT or 
+        held_hours >= HOLD_HOURS_MAX
+    )
+    return should_sell, return_pct, held_hours
+
+def evaluate_buy_condition(prices, i, current_price):
+    if i < DROP_LOOKBACK_BARS or i < 10:
+        return False, None, None
+
+    window = prices.iloc[i - DROP_LOOKBACK_BARS:i]
+    max_close = window["close"].max()
+    drop_pct = (current_price - max_close) / max_close * 100
+    sma10 = prices["close"].rolling(10).mean().iloc[i - 1]
+    trend_ok = prices.iloc[i]["close"] > sma10
+
+    return drop_pct <= -DROP_PCT and trend_ok, drop_pct, sma10
+
+def format_timestamps_for_display(df):
+    df_display = df.copy()
+    df_display.index = df_display.index.tz_convert(eastern)
+    df_display.index = df_display.index.strftime('%Y-%m-%d %I:%M %p')
+    return df_display
+
+def process_ticker(ticker, prices, current_position, position_log):
+    now = prices.iloc[-1]
+    now_time = now.name
+    current_price = now["open"]
+
+    print(f"\n========== {ticker} ==========")
+
+    i = len(prices) - 1
+    if i >= DROP_LOOKBACK_BARS:
+        window = prices.iloc[i - DROP_LOOKBACK_BARS:i]
+        max_close = window["close"].max()
+        drop_pct = (current_price - max_close) / max_close * 100
+        sma10 = prices["close"].rolling(10).mean().iloc[i - 1]
+        trend_ok = prices.iloc[i]["close"] > sma10
+        recent_drops = (prices["open"] - prices["close"].rolling(DROP_LOOKBACK_BARS).max()) / prices["close"].rolling(DROP_LOOKBACK_BARS).max() * 100
+        recent_drops = recent_drops.dropna().tail(5).round(2).to_list()
+
+        print(f"Strategy Snapshot:")
+        print(f"  Current Price        : ${current_price:.2f}")
+        print(f"  Max Close (60 bars)  : ${max_close:.2f}")
+        print(f"  % Drop from Max      : {drop_pct:.2f}%")
+        print(f"  SMA-10               : ${sma10:.2f}")
+        print(f"  Trend Above SMA10?   : {trend_ok}")
+        print(f"  Recent Drop Trend    : {recent_drops}")
+    else:
+        print("[WARN] Not enough data for full 60-bar analysis.")
+
+    if current_position:
+        entry_info = position_log.get(ticker)
+        qty = float(current_position.qty)
+
+        if not entry_info:
+            print(f"[WARN] {ticker} position exists but not in JSON log.")
+            return
+
+        entry_time = datetime.fromisoformat(entry_info["entry_time"])
+        entry_price = float(entry_info["entry_price"])
+
+        should_sell, return_pct, held_hours = evaluate_sell_condition(current_price, now_time, entry_time, entry_price)
+        print(f"[SELL CHECK] Price: ${current_price:.2f} | Entry: ${entry_price:.2f} | Held: {held_hours:.2f}h | Return: {return_pct:.2f}% | Trigger: {should_sell}")
+
+        if should_sell:
+            trading_client.submit_order(
+                MarketOrderRequest(
+                    symbol=ticker,
+                    qty=qty,
+                    side=OrderSide.SELL,
+                    time_in_force=TimeInForce.DAY
+                )
+            )
+            print(f"[SELL] {ticker} at ${current_price:.2f} | Return: {return_pct:.2f}%")
+            position_log.pop(ticker, None)
+
+    else:
+        if ticker in position_log:
+            print(f"[SKIP] {ticker} in log but not in Alpaca — skipping.")
+            return
+
+        should_buy, drop_pct, sma10 = evaluate_buy_condition(prices, i, current_price)
+        sma10_display = f"{sma10:.2f}" if sma10 is not None else "N/A"
+        print(f"[BUY CHECK] Price: ${current_price:.2f} | Drop: {drop_pct:.2f}% | SMA10: {sma10_display} | Trigger: {should_buy}")
+
+        if should_buy:
+            shares = int(POSITION_SIZE // current_price)
+            if shares > 0:
                 trading_client.submit_order(
                     MarketOrderRequest(
                         symbol=ticker,
-                        qty=qty,
-                        side=OrderSide.SELL,
+                        qty=shares,
+                        side=OrderSide.BUY,
                         time_in_force=TimeInForce.DAY
                     )
                 )
-                print(f"[SELL] {ticker} at ${current_price:.2f} | Return: {return_pct:.2f}%")
+                position_log[ticker] = {
+                    "entry_time": now_time.isoformat(),
+                    "entry_price": current_price,
+                    "shares": shares
+                }
+                print(f"[BUY] {ticker} at ${current_price:.2f} | Drop: {drop_pct:.2f}%")
 
-        # BUY CHECK
-        else:
-            window = prices.iloc[-DROP_LOOKBACK_BARS:]
-            max_close = window["close"].max()
-            drop_pct = (current_price - max_close) / max_close * 100
-            sma10 = prices["close"].rolling(10).mean().iloc[-2]
-            trend_ok = now["close"] > sma10
 
-            if drop_pct <= -DROP_PCT and trend_ok:
-                shares = int(POSITION_SIZE // current_price)
-                if shares > 0:
-                    trading_client.submit_order(
-                        MarketOrderRequest(
-                            symbol=ticker,
-                            qty=shares,
-                            side=OrderSide.BUY,
-                            time_in_force=TimeInForce.DAY
-                        )
-                    )
-                    print(f"[BUY] {ticker} at ${current_price:.2f} | Drop: {drop_pct:.2f}%")
+if __name__ == "__main__":
+    utc_now = datetime.now(pytz.UTC)
+    start_time = utc_now - timedelta(minutes=DROP_LOOKBACK_BARS + 2)
 
-    except Exception as e:
-        print(f"Error processing {ticker}: {e}")
+    position_log = load_position_log()
+    open_positions = {p.symbol: p for p in trading_client.get_all_positions()}
+
+    for ticker in TICKERS:
+        try:
+            prices = fetch_recent_data(ticker, start_time, utc_now)
+            if prices is None or len(prices) < DROP_LOOKBACK_BARS:
+                prev_close = fetch_previous_day_close_data(ticker)
+                if prev_close is not None and not prev_close.empty:
+                    prices = pd.concat([prev_close, prices]) if prices is not None else prev_close
+                    print(f"[INFO] Augmented {ticker} with previous close data")
+                else:
+                    print(f"[SKIP] {ticker} has insufficient data and no previous close to backfill")
+                    continue
+
+            active_position = open_positions.get(ticker)
+            process_ticker(ticker, prices, active_position, position_log)
+
+        except Exception as e:
+            print(f"[ERROR] {ticker}: {e}")
+
+    save_position_log(position_log)
