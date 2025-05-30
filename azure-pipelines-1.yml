@@ -12,19 +12,11 @@ pool:
   name: alpaca-agent
 
 steps:
-  - checkout: self  # This pulls your GitHub repo code into the pipeline agent workspace
+  - checkout: self  # Pulls your GitHub repo code into the pipeline agent workspace
 
   - script: |
-      python3 -m venv .venv
-      source .venv/bin/activate
-      python -m pip install --upgrade pip
-      pip install -r requirements.txt
-    displayName: 'Install dependencies in venv'
-
-
-
-  - script: |
-      python3 momentum-algo-1min.py
+      source ~/.venv/bin/activate
+      python momentum-algo-1min.py
     displayName: 'Run Momentum Strategy'
     env:
       APCA_API_KEY_ID: $(APCA_API_KEY_ID)
