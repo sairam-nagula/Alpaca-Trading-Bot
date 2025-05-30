@@ -1,8 +1,8 @@
 trigger: none
 
 schedules:
-  - cron: "*/5 13-20 * * 1-5"  # Every 5 minutes from 9 AM to 4:59 PM ET
-    displayName: "Every 5 Minutes - Market Hours ET"
+  - cron: "*/1 13-20 * * 1-5"  # Every 5 minutes from 9 AM to 4:59 PM ET
+    displayName: "Every 1 Minutes - Market Hours ET"
     branches:
       include:
         - main
@@ -16,7 +16,7 @@ steps:
 
   - script: |
       source ~/.venv/bin/activate
-      python 1-min/momentum-algo-1min.py
+      python Bounce-back/forwardtestbounceback.py
     displayName: 'Run Momentum Strategy'
     env:
       APCA_API_KEY_ID: $(APCA_API_KEY_ID)
