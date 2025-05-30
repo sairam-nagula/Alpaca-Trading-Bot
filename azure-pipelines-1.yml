@@ -16,7 +16,7 @@ steps:
 
   - script: |
       source ~/.venv/bin/activate
-      python momentum-algo-1min.py
+      python 1-min/momentum-algo-1min.py
     displayName: 'Run Momentum Strategy'
     env:
       APCA_API_KEY_ID: $(APCA_API_KEY_ID)
