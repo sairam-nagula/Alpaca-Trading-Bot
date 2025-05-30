@@ -1,7 +1,7 @@
 trigger: none
 
 schedules:
-  - cron: "*/1 13-20 * * 1-5"  # Every 5 minutes from 9 AM to 4:59 PM ET
+  - cron: "*/5 13-20 * * 1-5"  # Every 5 minutes from 9 AM to 4:59 PM ET
     displayName: "Every 5 Minutes - Market Hours ET"
     branches:
       include:
@@ -13,10 +13,6 @@ pool:
 
 steps:
   - checkout: self  # This pulls your GitHub repo code into the pipeline agent workspace
-  - script: |
-      sudo apt update
-      sudo apt install -y python3-pip
-    displayName: 'Install pip3'
 
   - script: |
       python3 -m pip install --upgrade pip
