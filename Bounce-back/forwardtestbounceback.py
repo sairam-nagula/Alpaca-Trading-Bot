@@ -10,6 +10,8 @@ from alpaca.trading.enums import OrderSide, TimeInForce
 from alpaca.data.historical import StockHistoricalDataClient
 from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 # === STRATEGY PARAMETERS ===
 POSITION_SIZE = 10000
@@ -18,7 +20,14 @@ TAKE_PROFIT_PCT = 4.0
 STOP_LOSS_PCT = -0.5
 HOLD_HOURS_MAX = 72
 DROP_LOOKBACK_BARS = 60
-POSITION_LOG_FILE = "Bounce-back/position_log.json"
+
+
+# Firebase setup
+cred = credentials.Certificate("firebase-key.json")
+firebase_admin.initialize_app(cred)
+db = firestore.client()
+positions_ref = db.collection("positions")
+
 
 # === SETUP ===
 load_dotenv()
@@ -32,14 +41,14 @@ data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 eastern = pytz.timezone("US/Eastern")
 
 def load_position_log():
-    if os.path.exists(POSITION_LOG_FILE):
-        with open(POSITION_LOG_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    docs = positions_ref.stream()
+    return {doc.id: doc.to_dict() for doc in docs}
+
 
 def save_position_log(log):
-    with open(POSITION_LOG_FILE, "w") as f:
-        json.dump(log, f, indent=2)
+    for ticker, data in log.items():
+        positions_ref.document(ticker).set(data)
+
 
 def fetch_recent_data(symbol, start, end):
     request = StockBarsRequest(
@@ -158,7 +167,8 @@ def process_ticker(ticker, prices, current_position, position_log):
                 )
             )
             print(f"[SELL] {ticker} at ${current_price:.2f} | Return: {return_pct:.2f}%")
-            position_log.pop(ticker, None)
+            positions_ref.document(ticker).delete()
+
 
     else:
         if ticker in position_log:
