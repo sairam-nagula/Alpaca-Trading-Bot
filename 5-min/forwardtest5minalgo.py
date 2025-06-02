@@ -23,7 +23,7 @@ data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Strategy parameters
 MOMENTUM_THRESHOLD = 0.15  # in %
-POSITION_SIZE = 5000  # dollars per trade
+POSITION_SIZE = 10000  # dollars per trade
 HOLD_DURATION_MINUTES = 15
 STOP_LOSS_PCT = -0.3  # in %
 
