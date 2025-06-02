@@ -12,7 +12,7 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 
 # === STRATEGY PARAMETERS ===
-POSITION_SIZE = 900
+POSITION_SIZE = 10000
 DROP_PCT = 4.0
 TAKE_PROFIT_PCT = 4.0
 STOP_LOSS_PCT = -0.5
