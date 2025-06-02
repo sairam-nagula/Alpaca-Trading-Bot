@@ -23,14 +23,17 @@ DROP_LOOKBACK_BARS = 60
 
 
 # Firebase setup
-cred = credentials.Certificate("firebase-key.json")
+load_dotenv()
+key_str = os.getenv("FIREBASE_KEY")
+key_dict = json.loads(key_str)
+cred = credentials.Certificate(key_dict)
+
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 positions_ref = db.collection("positions")
 
 
 # === SETUP ===
-load_dotenv()
 API_KEY = os.getenv("APCA_API_KEY_ID")
 SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
 TICKERS = [t.strip() for t in os.getenv("TICKERS", "").split(",") if t.strip()]
