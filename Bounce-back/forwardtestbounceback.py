@@ -59,7 +59,6 @@ def fetch_recent_data(symbol, start, end):
         timeframe=TimeFrame.Minute,
         start=start,
         end=end,
-        feed="iex"
     )
     bars = data_client.get_stock_bars(request).df
     if bars.empty or symbol not in bars.index.get_level_values(0):
