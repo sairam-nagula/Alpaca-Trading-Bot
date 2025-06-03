@@ -207,8 +207,18 @@ if __name__ == "__main__":
     position_log = load_position_log()
     open_positions = {p.symbol: p for p in trading_client.get_all_positions()}
 
+   
+
+
     for ticker in TICKERS:
         try:
+            if ticker in position_log and ticker not in open_positions:
+                print(f"\n========== {ticker} ==========")
+                print(f"[CLEANUP] {ticker} found in log but not in Alpaca — removing stale log entry.")
+                del position_log[ticker]
+                positions_ref.document(ticker).delete()
+                continue  # Skip the rest for this ticker
+
             prices = fetch_recent_data(ticker, start_time, utc_now)
             if prices is None or len(prices) < DROP_LOOKBACK_BARS:
                 now_et = datetime.now(eastern)
