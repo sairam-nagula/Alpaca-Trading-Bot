@@ -1,10 +1,10 @@
-name: Run Momentum Strategy Every 5 Minute
+name: Run Momentum Strategy Every 1 Minute
 
 on:
   schedule:
 
     # Market hours: 14:30–21:00 UTC (9:30 AM–4:00 PM ET)
-    - cron: '*/5 13-20 * * 1-5'
+    - cron: '*/1 13-20 * * 1-5'
 
 
   workflow_dispatch:  # Optional manual run
@@ -30,7 +30,7 @@ jobs:
 
 
       - name: Run 5 min strategy script
-        run: python 5-min/momentum-algo-5min.py
+        run: python Bounce-back\forwardtestbounceback.py
         env:
           APCA_API_KEY_ID: ${{ secrets.APCA_API_KEY_ID }}
           APCA_API_SECRET_KEY: ${{ secrets.APCA_API_SECRET_KEY }}
