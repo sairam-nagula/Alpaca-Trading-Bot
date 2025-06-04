@@ -20,13 +20,13 @@ data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 # Parameters
 STARTING_CASH = 1000
 POSITION_SIZE = 900
-DROP_PCT = 4.0
-TAKE_PROFIT_PCT = 4.0
-STOP_LOSS_PCT = -0.5
+DROP_PCT = 3.0
+TAKE_PROFIT_PCT = 2.0
+STOP_LOSS_PCT = -0.35
 HOLD_HOURS_MAX = 72
 DROP_LOOKBACK_BARS = 60
 
-START_DATE = datetime(2024, 11, 21, tzinfo=pytz.UTC)
+START_DATE = datetime(2025, 1, 1, tzinfo=pytz.UTC)
 END_DATE = datetime(2025, 6, 1, tzinfo=pytz.UTC)
 
 def fetch_minute_data(symbol, start, end):
@@ -35,7 +35,6 @@ def fetch_minute_data(symbol, start, end):
         timeframe=TimeFrame.Minute,
         start=start,
         end=end,
-        feed="iex"
     )
     bars = data_client.get_stock_bars(request).df
     return bars.xs(symbol, level=0)
@@ -131,7 +130,8 @@ def plot_trades(prices, trades, ticker):
     plt.show()
 
 
-if __name__ == "__main__":
+
+def main():
     all_trades = []
     combined_final_value = 0
     
@@ -185,3 +185,7 @@ if __name__ == "__main__":
         print(f"Total Strategy P&L: ${combined_final_value - starting_total:.2f}")
     else:
         print("No trades were executed.")
+
+
+if __name__ == "__main__":
+    main()

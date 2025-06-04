@@ -15,9 +15,9 @@ from firebase_admin import credentials, firestore
 
 # === STRATEGY PARAMETERS ===
 POSITION_SIZE = 10000
-DROP_PCT = 4.0
-TAKE_PROFIT_PCT = 4.0
-STOP_LOSS_PCT = -0.5
+DROP_PCT = 3.0
+TAKE_PROFIT_PCT = 2.0
+STOP_LOSS_PCT = -0.35
 HOLD_HOURS_MAX = 72
 DROP_LOOKBACK_BARS = 60
 
@@ -199,8 +199,7 @@ def process_ticker(ticker, prices, current_position, position_log):
                 }
                 print(f"[BUY] {ticker} at ${current_price:.2f} | Drop: {drop_pct:.2f}%")
 
-
-if __name__ == "__main__":
+def main():
     utc_now = datetime.now(pytz.UTC)
     start_time = utc_now - timedelta(minutes=DROP_LOOKBACK_BARS + 2)
 
@@ -247,3 +246,8 @@ if __name__ == "__main__":
             print(f"[ERROR] {ticker}: {e}")
 
     save_position_log(position_log)
+
+
+
+if __name__ == "__main__":
+    main()
