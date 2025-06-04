@@ -107,8 +107,10 @@ def evaluate_buy_condition(prices, i, current_price):
     window = prices.iloc[i - DROP_LOOKBACK_BARS:i]
     max_close = window["close"].max()
     drop_pct = (current_price - max_close) / max_close * 100
-    sma10 = prices["close"].rolling(10).mean().iloc[i - 1]
-    trend_ok = prices.iloc[i]["close"] > sma10
+
+    # Use current candle's close instead of comparing to previous SMA
+    sma10 = prices["close"].rolling(10).mean().iloc[i]
+    trend_ok = current_price > sma10
 
     return drop_pct <= -DROP_PCT and trend_ok, drop_pct, sma10
 
