@@ -14,7 +14,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # === STRATEGY PARAMETERS ===
-POSITION_SIZE = 10000
+POSITION_SIZE = 20000
 DROP_PCT = 3.0
 TAKE_PROFIT_PCT = 2.0
 STOP_LOSS_PCT = -0.35
