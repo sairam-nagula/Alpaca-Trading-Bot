@@ -9,6 +9,9 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 import matplotlib.pyplot as plt
 
+#Initialize some variables
+eastern = pytz.timezone('US/Eastern')
+
 # Load credentials
 load_dotenv()
 API_KEY = os.getenv("APCA_API_KEY_ID")
@@ -70,7 +73,7 @@ def run_backtest(prices):
             window = prices.iloc[i - DROP_LOOKBACK_BARS:i]
             max_close = window["close"].max()
             drop_pct = (current_price - max_close) / max_close * 100
-            sma10 = prices["close"].rolling(10).mean().iloc[i-1]
+            sma10 = prices["close"].rolling(10).mean().iloc[i]
             trend_ok = now["close"] > sma10
 
             if drop_pct <= -DROP_PCT and trend_ok:
@@ -152,9 +155,11 @@ def main():
             print(f"Final Portfolio Value: ${cash:.2f}")
             print(f"Total Trades: {len(trades)}\n")
             for trade in trades:
-                print(f"{trade['buy_time']} BUY @ ${trade['buy_price']:.2f} → "
-                      f"{trade['sell_time']} SELL @ ${trade['sell_price']:.2f} | "
-                      f"Return: {trade['return_pct']:.2f}%")
+                buy_time_est = trade["buy_time"].astimezone(eastern).strftime("%Y-%m-%d %I:%M %p")
+                sell_time_est = trade["sell_time"].astimezone(eastern).strftime("%Y-%m-%d %I:%M %p")
+                print(f"{buy_time_est} BUY @ ${trade['buy_price']:.2f} → "
+                    f"{sell_time_est} SELL @ ${trade['sell_price']:.2f} | "
+                    f"Return: {trade['return_pct']:.2f}%")
 
             # plot_trades(prices, trades, TICKER)
 

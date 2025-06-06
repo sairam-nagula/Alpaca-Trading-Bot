@@ -11,7 +11,7 @@ from alpaca.data.timeframe import TimeFrame
 load_dotenv()
 API_KEY = os.getenv("APCA_API_KEY_ID")
 SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
-symbol = "HIMS"
+symbol = "RIOT"
 
 # Initialize Alpaca client
 client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
@@ -29,7 +29,7 @@ request = StockBarsRequest(
 
 bars = client.get_stock_bars(request).df
 if bars.empty:
-    print("[ERROR] No data returned for HIMS.")
+    print(f"[ERROR] No data returned for {symbol}.")
 else:
     df = bars.xs(symbol, level=0)
     df.index = df.index.tz_convert("US/Eastern")  # Convert to ET

@@ -132,7 +132,7 @@ def process_ticker(ticker, prices, current_position, position_log):
         window = prices.iloc[i - DROP_LOOKBACK_BARS:i]
         max_close = window["close"].max()
         drop_pct = (current_price - max_close) / max_close * 100
-        sma10 = prices["close"].rolling(10).mean().iloc[i - 1]
+        sma10 = prices["close"].rolling(10).mean().iloc[i]
         trend_ok = prices.iloc[i]["close"] > sma10
         recent_drops = (prices["open"] - prices["close"].rolling(DROP_LOOKBACK_BARS).max()) / prices["close"].rolling(DROP_LOOKBACK_BARS).max() * 100
         recent_drops = recent_drops.dropna().tail(5).round(2).to_list()
