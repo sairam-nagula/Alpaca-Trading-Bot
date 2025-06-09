@@ -21,7 +21,7 @@ TICKERS = [ticker.strip() for ticker in os.getenv("TICKERS", "").split(",") if t
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Parameters
-STARTING_CASH = 2000
+STARTING_CASH = 1000
 POSITION_SIZE = 900
 DROP_PCT = 4.0
 TAKE_PROFIT_PCT = 4
@@ -52,7 +52,7 @@ def run_backtest(prices):
         signal_candle = prices.iloc[i - 2]  # simulate decision made based on previous candle
         now = prices.iloc[i]                # execution happens on this candle
         now_time = now.name
-        current_price = now["open"]         # simulate buy/sell at open of this minute
+        current_price = now["open"]
 
         if position:
             entry_price = position["entry_price"]
@@ -79,8 +79,8 @@ def run_backtest(prices):
             trend_ok = signal_candle["close"] > sma10
 
             if drop_pct <= -DROP_PCT and trend_ok:
-                shares_to_buy = POSITION_SIZE / current_price
-                if cash >= shares_to_buy * current_price:
+                shares_to_buy = cash / current_price
+                if shares_to_buy > 0:
                     cash -= shares_to_buy * current_price
                     position = {
                         "entry_time": now_time,
@@ -88,7 +88,6 @@ def run_backtest(prices):
                         "shares": shares_to_buy
                     }
 
-    # Close any open position at the final price
     if position:
         final_price = prices.iloc[-1]["close"]
         shares = position["shares"]
@@ -102,6 +101,7 @@ def run_backtest(prices):
         })
 
     return cash, trades
+
 
 def plot_trades(prices, trades, ticker):
     plt.figure(figsize=(14, 6))
