@@ -29,8 +29,8 @@ STOP_LOSS_PCT = -0.35
 HOLD_HOURS_MAX = 72
 DROP_LOOKBACK_BARS = 60
 
-START_DATE = datetime(2025, 6, 5, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 6, 6, tzinfo=pytz.UTC)
+START_DATE = datetime(2025, 6, 9, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 6, 10, tzinfo=pytz.UTC)
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
@@ -38,6 +38,7 @@ def fetch_minute_data(symbol, start, end):
         timeframe=TimeFrame.Minute,
         start=start,
         end=end,
+        feed="sip"
     )
     bars = data_client.get_stock_bars(request).df
     return bars.xs(symbol, level=0)

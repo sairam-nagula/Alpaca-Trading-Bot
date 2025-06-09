@@ -59,6 +59,7 @@ def fetch_recent_data(symbol, start, end):
         timeframe=TimeFrame.Minute,
         start=start,
         end=end,
+        feed="sip",
     )
     bars = data_client.get_stock_bars(request).df
     if bars.empty or symbol not in bars.index.get_level_values(0):
@@ -106,11 +107,11 @@ def evaluate_buy_condition(prices, i, current_price):
 
     window = prices.iloc[i - DROP_LOOKBACK_BARS:i]
     max_close = window["close"].max()
-    drop_pct = (current_price - max_close) / max_close * 100
+    drop_pct = (prices.iloc[i - 1]["open"] - max_close) / max_close * 100
 
-    # Use current candle's close instead of comparing to previous SMA
-    sma10 = prices["close"].rolling(10).mean().iloc[i]
-    trend_ok = current_price > sma10
+    sma10 = prices["close"].rolling(10).mean().iloc[i - 1]
+    trend_ok = prices.iloc[i - 1]["close"] > sma10
+
 
     return drop_pct <= -DROP_PCT and trend_ok, drop_pct, sma10
 
@@ -132,7 +133,7 @@ def process_ticker(ticker, prices, current_position, position_log):
         window = prices.iloc[i - DROP_LOOKBACK_BARS:i]
         max_close = window["close"].max()
         drop_pct = (current_price - max_close) / max_close * 100
-        sma10 = prices["close"].rolling(10).mean().iloc[i]
+        sma10 = prices["close"].rolling(10).mean().iloc[i-1]
         trend_ok = prices.iloc[i]["close"] > sma10
         recent_drops = (prices["open"] - prices["close"].rolling(DROP_LOOKBACK_BARS).max()) / prices["close"].rolling(DROP_LOOKBACK_BARS).max() * 100
         recent_drops = recent_drops.dropna().tail(5).round(2).to_list()
