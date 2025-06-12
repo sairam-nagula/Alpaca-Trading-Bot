@@ -49,10 +49,10 @@ def run_backtest(prices):
     trades = []
 
     for i in range(DROP_LOOKBACK_BARS + 1, len(prices)):
-        signal_candle = prices.iloc[i - 2]  # simulate decision made based on previous candle
+        signal_candle = prices.iloc[i]  # simulate decision made based on previous candle
         now = prices.iloc[i]                # execution happens on this candle
         now_time = now.name
-        current_price = now["open"]
+        current_price = now["close"]
 
         if position:
             entry_price = position["entry_price"]
@@ -74,7 +74,7 @@ def run_backtest(prices):
         else:
             window = prices.iloc[i - DROP_LOOKBACK_BARS - 1:i - 1]
             max_close = window["close"].max()
-            drop_pct = (signal_candle["open"] - max_close) / max_close * 100
+            drop_pct = (signal_candle["close"] - max_close) / max_close * 100
             sma10 = prices["close"].rolling(10).mean().iloc[i - 1]
             trend_ok = signal_candle["close"] > sma10
 

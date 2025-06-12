@@ -24,10 +24,10 @@ data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 STARTING_CASH = 2000
 POSITION_SIZE = 900
 DROP_PCT = 4.0
-TAKE_PROFIT_PCT = 4
+TAKE_PROFIT_PCT = 3
 STOP_LOSS_PCT = -.6
 HOLD_HOURS_MAX = 72
-DROP_LOOKBACK_BARS = 1200
+DROP_LOOKBACK_BARS = 60
 
 START_DATE = datetime(2025, 1, 5, tzinfo=pytz.UTC)
 END_DATE = datetime(2025, 6, 16, tzinfo=pytz.UTC)
@@ -49,10 +49,10 @@ def run_backtest(prices):
     trades = []
 
     for i in range(DROP_LOOKBACK_BARS + 1, len(prices)):
-        signal_candle = prices.iloc[i - 2]  # simulate decision made based on previous candle
+        signal_candle = prices.iloc[i]  # simulate decision made based on previous candle
         now = prices.iloc[i]                # execution happens on this candle
         now_time = now.name
-        current_price = now["open"]         # simulate buy/sell at open of this minute
+        current_price = now["close"]         # simulate buy/sell at close of this minute
 
         if position:
             entry_price = position["entry_price"]
@@ -73,8 +73,8 @@ def run_backtest(prices):
 
         else:
             window = prices.iloc[i - DROP_LOOKBACK_BARS - 1:i - 1]
-            max_close = window["close"].max()
-            drop_pct = (signal_candle["open"] - max_close) / max_close * 100
+            max_high = window["high"].max()
+            drop_pct = (signal_candle["close"] - max_high) / max_high * 100
             sma10 = prices["close"].rolling(10).mean().iloc[i - 1]
             trend_ok = signal_candle["close"] > sma10
 
