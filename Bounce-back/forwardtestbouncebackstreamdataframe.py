@@ -36,6 +36,15 @@ trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 stream = StockDataStream(API_KEY, SECRET_KEY)
 
+# === LOGGING SETUP ===
+LOG_FILE = "output.log"
+
+def log_message(msg):
+    with open(LOG_FILE, "a") as f:
+        f.write(msg + "\n")
+    print(msg)
+
+
 # === Initialize DF with Historical Bars ===
 def init_prices_df(ticker) -> pd.DataFrame:
     end = datetime.now(pytz.UTC)
@@ -45,7 +54,6 @@ def init_prices_df(ticker) -> pd.DataFrame:
         timeframe=TimeFrame.Minute,
         start=start,
         end=end,
-        feed="sip"
     )
     bars = data_client.get_stock_bars(request).df
     return bars.xs(ticker, level=0).tail(ROLLING_WINDOW_SIZE)
@@ -85,6 +93,9 @@ def process_new_bar(new_bar):
 
         if return_pct >= TAKE_PROFIT_PCT or return_pct <= STOP_LOSS_PCT or time_held >= HOLD_HOURS_MAX:
             print(f"[SELL] {change_timezone(current_time)} | Price: {current_price:.2f} | Return: {return_pct:.2f}%")
+            log_message(
+                f"[SELL] {change_timezone(current_time)} | Price: {current_price:.2f} | Return: {return_pct:.2f}%"
+            )
             trading_client.submit_order(
                 MarketOrderRequest(
                     symbol=symbol,
@@ -104,6 +115,9 @@ def process_new_bar(new_bar):
             shares_to_buy = int(POSITION_SIZE / current_price)
             if shares_to_buy > 0:
                 print(f"[BUY] {change_timezone(current_time)} | Price: {current_price:.2f} | Drop: {drop_pct:.2f}% | SMA OK")
+                log_message(
+                    f"[BUY] {change_timezone(current_time)} | Price: {current_price:.2f} | Drop: {drop_pct:.2f}% | SMA OK"
+                )
                 trading_client.submit_order(
                     MarketOrderRequest(
                         symbol=symbol,
@@ -134,8 +148,8 @@ async def handle_bar(bar):
 
     # Calculate % drop from peak
     prev_window = prices_df[symbol].iloc[-(DROP_LOOKBACK_BARS + 1):-1]
-    max_close = prev_window["close"].max()
-    drop_pct = (bar.close - max_close) / max_close * 100
+    max_high = prev_window["high"].max()
+    drop_pct = (bar.close - max_high) / max_high * 100
 
     # Compare to SMA10
     sma10 = prices_df[symbol]["close"].rolling(10).mean().iloc[-1]
@@ -145,7 +159,12 @@ async def handle_bar(bar):
     formatted_time = change_timezone(bar.timestamp)
     print(
         f"[{symbol}] {formatted_time}\n"
-        f"       High: {bar.high:.2f} | Close: {bar.close:.2f}\n "
+        f"       High: {max_high:.2f} | Close: {bar.close:.2f}\n "
+        f"      Drop: {drop_pct:.2f}% | Above sma10: {above_sma}"
+    )
+    log_message(
+        f"[{symbol}] {formatted_time}\n"
+        f"       High: {max_high:.2f} | Close: {bar.close:.2f}\n "
         f"      Drop: {drop_pct:.2f}% | Above sma10: {above_sma}"
     )
 
@@ -153,6 +172,7 @@ async def handle_bar(bar):
 async def main():
     global prices_df
     for ticker in TICKERS:
+        print("=====================")
         prices_df[ticker] = init_prices_df(ticker)
         stream.subscribe_bars(handle_bar, ticker)
 

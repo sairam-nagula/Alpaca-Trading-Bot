@@ -20,8 +20,8 @@ TICKERS = ["HIMS"]  # Add more as needed
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Time range
-START_DATE = datetime(2025, 6, 11, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 6, 12, tzinfo=pytz.UTC)
+START_DATE = datetime(2025, 6, 13, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 6, 14, tzinfo=pytz.UTC)
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
@@ -48,7 +48,7 @@ combined_df = pd.concat(all_data) if all_data else pd.DataFrame()
 
 # === Print Historical Minute Bars (last 5 rows) ===
 print("=== LAST 5 MINUTE BARS (REST) ===")
-print(combined_df.tail(5))
+print(combined_df.tail(20))
 
 # === Print Latest Quote and Trade (per ticker) ===
 print("\n=== LIVE QUOTE AND TRADE DATA (REST) ===")

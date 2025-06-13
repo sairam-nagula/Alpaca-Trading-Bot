@@ -33,7 +33,7 @@ async def handle_bar(bar):
 
 # Subscribe to bars
 
-stream.subscribe_bars(handle_bar, "AAPL")
+stream.subscribe_bars(handle_bar, "LABU")
 
 # Start the stream
 stream.run()
