@@ -42,7 +42,6 @@ LOG_FILE = "output.log"
 def log_message(msg):
     with open(LOG_FILE, "a") as f:
         f.write(msg + "\n")
-    print(msg)
 
 
 # === Initialize DF with Historical Bars ===
@@ -172,7 +171,6 @@ async def handle_bar(bar):
 async def main():
     global prices_df
     for ticker in TICKERS:
-        print("=====================")
         prices_df[ticker] = init_prices_df(ticker)
         stream.subscribe_bars(handle_bar, ticker)
 
