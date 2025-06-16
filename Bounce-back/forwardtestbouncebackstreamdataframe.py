@@ -91,9 +91,9 @@ def process_new_bar(new_bar):
         return_pct = (current_price - entry_price) / entry_price * 100
 
         if return_pct >= TAKE_PROFIT_PCT or return_pct <= STOP_LOSS_PCT or time_held >= HOLD_HOURS_MAX:
-            print(f"[SELL] {change_timezone(current_time)} | Price: {current_price:.2f} | Return: {return_pct:.2f}%")
+            print(f"[SELL] [{symbol}] {change_timezone(current_time)} | Price: {current_price:.2f} | Return: {return_pct:.2f}%")
             log_message(
-                f"[SELL] {change_timezone(current_time)} | Price: {current_price:.2f} | Return: {return_pct:.2f}%"
+                f"[SELL] [{symbol}] {change_timezone(current_time)} | Price: {current_price:.2f} | Return: {return_pct:.2f}%"
             )
             trading_client.submit_order(
                 MarketOrderRequest(
@@ -113,9 +113,9 @@ def process_new_bar(new_bar):
         if drop_pct <= -DROP_PCT and trend_ok:
             shares_to_buy = int(POSITION_SIZE / current_price)
             if shares_to_buy > 0:
-                print(f"[BUY] {change_timezone(current_time)} | Price: {current_price:.2f} | Drop: {drop_pct:.2f}% | SMA OK")
+                print(f"[BUY] [{symbol}] {change_timezone(current_time)} | Price: {current_price:.2f} | Drop: {drop_pct:.2f}% | SMA OK")
                 log_message(
-                    f"[BUY] {change_timezone(current_time)} | Price: {current_price:.2f} | Drop: {drop_pct:.2f}% | SMA OK"
+                    f"[BUY] [{symbol}] {change_timezone(current_time)} | Price: {current_price:.2f} | Drop: {drop_pct:.2f}% | SMA OK"
                 )
                 trading_client.submit_order(
                     MarketOrderRequest(
