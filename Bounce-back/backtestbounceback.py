@@ -23,14 +23,14 @@ data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 # Parameters
 STARTING_CASH = 2000
 POSITION_SIZE = 900
-DROP_PCT = 4.0
-TAKE_PROFIT_PCT = 3
-STOP_LOSS_PCT = -.6
+DROP_PCT = 3
+TAKE_PROFIT_PCT = 2
+STOP_LOSS_PCT = -.35
 HOLD_HOURS_MAX = 72
 DROP_LOOKBACK_BARS = 60
 
-START_DATE = datetime(2025, 6, 13, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 6, 14, tzinfo=pytz.UTC)
+START_DATE = datetime(2025, 6, 16, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 6, 17, tzinfo=pytz.UTC)
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
