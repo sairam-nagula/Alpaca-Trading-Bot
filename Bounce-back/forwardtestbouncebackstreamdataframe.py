@@ -43,6 +43,24 @@ def log_message(msg):
     with open(LOG_FILE, "a") as f:
         f.write(msg + "\n")
 
+# === LOAD OPEN POSITIONS ===
+def load_open_positions():
+    global position
+    try:
+        live_positions = trading_client.get_all_positions()
+        for pos in live_positions:
+            symbol = pos.symbol.upper()
+            position[symbol] = {
+                "entry_price": float(pos.avg_entry_price),
+                "entry_time": datetime.now(pytz.UTC),  # Approximate since API doesn't return this
+                "shares": int(pos.qty)
+            }
+            print(f"[INIT] Loaded open position: {symbol} | Entry: {pos.avg_entry_price} | Shares: {pos.qty}")
+            log_message(f"[INIT] Loaded open position: {symbol} | Entry: {pos.avg_entry_price} | Shares: {pos.qty}")
+    except Exception as e:
+        print(f"[ERROR] Failed to load positions: {e}")
+        log_message(f"[ERROR] Failed to load positions: {e}")
+
 
 # === Initialize DF with Historical Bars ===
 def init_prices_df(ticker) -> pd.DataFrame:
@@ -141,6 +159,17 @@ async def handle_bar(bar):
     symbol = bar.symbol
     process_new_bar(bar)
 
+        # Show live return if we hold the stock
+    if symbol in position:
+        entry_price = position[symbol]["entry_price"]
+        entry_time = position[symbol]["entry_time"]
+        return_pct = (bar.close - entry_price) / entry_price * 100
+        time_held = (bar.timestamp - entry_time).total_seconds() / 3600
+
+        print(f"[LIVE RETURN] [{symbol}] {change_timezone(bar.timestamp)} | Price: {bar.close:.2f} | Return: {return_pct:.2f}% | Held: {time_held:.2f}h")
+        log_message(f"[LIVE RETURN] [{symbol}] {change_timezone(bar.timestamp)} | Price: {bar.close:.2f} | Return: {return_pct:.2f}% | Held: {time_held:.2f}h")
+
+
     # Ensure data is long enough
     if symbol not in prices_df or len(prices_df[symbol]) < DROP_LOOKBACK_BARS + 1:
         return
@@ -170,6 +199,7 @@ async def handle_bar(bar):
 # === Run ===
 async def main():
     global prices_df
+    load_open_positions()
     for ticker in TICKERS:
         prices_df[ticker] = init_prices_df(ticker)
         stream.subscribe_bars(handle_bar, ticker)
