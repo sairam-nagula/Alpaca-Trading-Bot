@@ -105,17 +105,17 @@ def process_new_bar(new_bar):
             )
             del position[symbol]
     else:
-        max_close = prev_window["close"].max()
-        drop_pct = (signal_candle["close"] - max_close) / max_close * 100
+        max_high = prev_window["high"].max()
+        drop_pct = (signal_candle["close"] - max_high) / max_high * 100
         sma10 = prices_df[symbol]["close"].rolling(10).mean().iloc[-1]
         trend_ok = signal_candle["close"] > sma10
 
         if drop_pct <= -DROP_PCT and trend_ok:
             shares_to_buy = int(POSITION_SIZE / current_price)
             if shares_to_buy > 0:
-                print(f"[BUY] [{symbol}] {change_timezone(current_time)} | Price: {current_price:.2f} | Drop: {drop_pct:.2f}% | SMA OK")
+                print(f"[BUY] [{symbol}] {change_timezone(current_time)} | Price: {current_price:.2f} | Drop: {drop_pct:.2f}% ")
                 log_message(
-                    f"[BUY] [{symbol}] {change_timezone(current_time)} | Price: {current_price:.2f} | Drop: {drop_pct:.2f}% | SMA OK"
+                    f"[BUY] [{symbol}] {change_timezone(current_time)} | Price: {current_price:.2f} | Drop: {drop_pct:.2f}% "
                 )
                 trading_client.submit_order(
                     MarketOrderRequest(

@@ -20,8 +20,8 @@ TICKERS = ["HIMS"]  # Add more as needed
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Time range
-START_DATE = datetime(2025, 6, 13, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 6, 14, tzinfo=pytz.UTC)
+START_DATE = datetime(2025, 6, 18, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 6, 19, tzinfo=pytz.UTC)
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
