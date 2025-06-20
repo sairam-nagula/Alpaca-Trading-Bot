@@ -1,0 +1,7 @@
+1. Track returns better for a better exit strategy
+    1. Maybe do this by subscribing to live trades or something
+2. check why fill order was super high
+3. check accuracy of orders via time
+4. check logs to see why im missing some subscribe tickers
+    1. create a function to use historical api for when it misses
+5. 
