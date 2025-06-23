@@ -4,4 +4,4 @@
 3. check accuracy of orders via time
 4. check logs to see why im missing some subscribe tickers
     1. create a function to use historical api for when it misses
-5. 
+5. change backtest to only check for market time data or change forward test to get all data using that helper function

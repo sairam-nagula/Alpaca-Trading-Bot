@@ -21,7 +21,7 @@ TICKERS = [ticker.strip() for ticker in os.getenv("TICKERS", "").split(",") if t
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Parameters
-STARTING_CASH = 2000
+STARTING_CASH = 1000
 POSITION_SIZE = 900
 DROP_PCT = 3
 TAKE_PROFIT_PCT = 2
@@ -29,8 +29,8 @@ STOP_LOSS_PCT = -.35
 HOLD_HOURS_MAX = 72
 DROP_LOOKBACK_BARS = 60
 
-START_DATE = datetime(2025, 6, 20, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 6, 21, tzinfo=pytz.UTC)
+START_DATE = datetime(2025, 6, 23, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 6, 24, tzinfo=pytz.UTC)
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
