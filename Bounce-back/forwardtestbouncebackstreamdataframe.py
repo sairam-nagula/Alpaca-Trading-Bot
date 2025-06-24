@@ -62,7 +62,7 @@ def load_open_positions():
         log_message(f"[ERROR] Failed to load positions: {e}")
 
 
-# === Initialize DF with Historical Bars ===
+# === Initialize DF with Historical Bars ===def init_prices_df(ticker) -> pd.DataFrame:
 def init_prices_df(ticker) -> pd.DataFrame:
     end = datetime.now(pytz.UTC)
     start = end - timedelta(minutes=ROLLING_WINDOW_SIZE + 5)
@@ -73,7 +73,11 @@ def init_prices_df(ticker) -> pd.DataFrame:
         end=end,
     )
     bars = data_client.get_stock_bars(request).df
-    return bars.xs(ticker, level=0).tail(ROLLING_WINDOW_SIZE)
+
+    if isinstance(bars.index, pd.MultiIndex):
+        return bars.xs(ticker, level=0).tail(ROLLING_WINDOW_SIZE)
+    else:
+        return pd.DataFrame()  # If no data is returned, fallback to empty
 
 # === Strategy Logic on New Bar ===
 def process_new_bar(new_bar):

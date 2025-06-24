@@ -14,14 +14,15 @@ API_KEY = os.getenv("APCA_API_KEY_ID")
 SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
 
 # List of tickers
-TICKERS = ["HIMS"]  # Add more as needed
+TICKERS = ["LABU"]  # Add more as needed
 
 # Initialize Alpaca data client
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Time range
-START_DATE = datetime(2025, 6, 18, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 6, 19, tzinfo=pytz.UTC)
+eastern = pytz.timezone('US/Eastern')
+START_DATE = eastern.localize(datetime(2025, 6, 20, 9, 30,))
+END_DATE = eastern.localize(datetime(2025, 6, 20, 11, 0,))
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
@@ -47,8 +48,14 @@ for ticker in TICKERS:
 combined_df = pd.concat(all_data) if all_data else pd.DataFrame()
 
 # === Print Historical Minute Bars (last 5 rows) ===
-print("=== LAST 5 MINUTE BARS (REST) ===")
-print(combined_df.tail(20))
+print("=== LAST COUPLE MINUTE BARS (REST) ===")
+# print(combined_df.tail(20))
+
+eastern = pytz.timezone('US/Eastern')
+combined_df = combined_df.reset_index()
+combined_df['timestamp_et'] = combined_df['timestamp'].dt.tz_convert(eastern).dt.strftime('%I:%M:%S %p')
+
+print(combined_df[['timestamp_et', 'open', 'high', 'low', 'close', 'volume', 'trade_count']].tail(20))
 
 # === Print Latest Quote and Trade (per ticker) ===
 print("\n=== LIVE QUOTE AND TRADE DATA (REST) ===")
