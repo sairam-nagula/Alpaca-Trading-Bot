@@ -62,7 +62,7 @@ def load_open_positions():
         log_message(f"[ERROR] Failed to load positions: {e}")
 
 
-# === Initialize DF with Historical Bars ===def init_prices_df(ticker) -> pd.DataFrame:
+# === Initialize DF with Historical Bars ===
 def init_prices_df(ticker) -> pd.DataFrame:
     end = datetime.now(pytz.UTC)
     start = end - timedelta(minutes=ROLLING_WINDOW_SIZE + 5)
