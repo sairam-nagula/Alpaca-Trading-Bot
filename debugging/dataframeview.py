@@ -21,8 +21,8 @@ data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Time range
 eastern = pytz.timezone('US/Eastern')
-START_DATE = eastern.localize(datetime(2025, 6, 20, 9, 30,))
-END_DATE = eastern.localize(datetime(2025, 6, 20, 11, 0,))
+START_DATE = eastern.localize(datetime(2025, 6, 26, 9, 30,))
+END_DATE = eastern.localize(datetime(2025, 6, 26, 12, 0,))
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
