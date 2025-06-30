@@ -216,6 +216,7 @@ async def handle_bar(bar):
 
 # === Run ===
 async def main():
+    print("Starting Bounce-back Forward Test with Advanced sell logic...")
     global prices_df
     load_open_positions()
     for ticker in TICKERS:
