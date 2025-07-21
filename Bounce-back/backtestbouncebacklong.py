@@ -9,7 +9,7 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 import matplotlib.pyplot as plt
 
-#Initialize some variables
+# Initialize timezone
 eastern = pytz.timezone('US/Eastern')
 
 # Load credentials
@@ -23,14 +23,14 @@ data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 # Parameters
 STARTING_CASH = 1000
 POSITION_SIZE = 900
-DROP_PCT = 3.5
-TAKE_PROFIT_PCT = 2.5
-STOP_LOSS_PCT = -.6
-HOLD_HOURS_MAX = 72
+DROP_PCT = 5
+TAKE_PROFIT_PCT = 10
+STOP_LOSS_PCT = -5
+HOLD_HOURS_MAX = 200
 DROP_LOOKBACK_BARS = 1200
 
-START_DATE = datetime(2025, 6, 20, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 6, 21, tzinfo=pytz.UTC)
+START_DATE = datetime(2024, 7, 20, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 7, 20, tzinfo=pytz.UTC)
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
@@ -44,13 +44,17 @@ def fetch_minute_data(symbol, start, end):
     return bars.xs(symbol, level=0)
 
 def run_backtest(prices):
+    prices["sma10"] = prices["close"].rolling(10).mean()
+    prices["sma20"] = prices["close"].rolling(20).mean()
+    prices["sma30"] = prices["close"].rolling(30).mean()
+
     cash = STARTING_CASH
     position = None
     trades = []
 
     for i in range(DROP_LOOKBACK_BARS + 1, len(prices)):
-        signal_candle = prices.iloc[i]  # simulate decision made based on previous candle
-        now = prices.iloc[i]                # execution happens on this candle
+        signal_candle = prices.iloc[i]
+        now = prices.iloc[i]
         now_time = now.name
         current_price = now["close"]
 
@@ -59,7 +63,21 @@ def run_backtest(prices):
             time_held = (now_time - position["entry_time"]).total_seconds() / 3600
             return_pct = (current_price - entry_price) / entry_price * 100
 
-            if return_pct >= TAKE_PROFIT_PCT or return_pct <= STOP_LOSS_PCT or time_held >= HOLD_HOURS_MAX:
+            sma10 = prices["sma10"].iloc[i]
+            sma20 = prices["sma20"].iloc[i]
+            sma30 = prices["sma30"].iloc[i]
+            fail_safe_triggered = (
+                current_price < sma10 * 0.95 and
+                current_price < sma20 * 0.95 and
+                current_price < sma30 * 0.95
+            )
+
+            if (
+                return_pct >= TAKE_PROFIT_PCT or
+                return_pct <= STOP_LOSS_PCT or
+                time_held >= HOLD_HOURS_MAX or
+                fail_safe_triggered
+            ):
                 shares = position["shares"]
                 cash += shares * current_price
                 trades.append({
@@ -67,7 +85,8 @@ def run_backtest(prices):
                     "buy_price": entry_price,
                     "sell_time": now_time,
                     "sell_price": current_price,
-                    "return_pct": return_pct
+                    "return_pct": return_pct,
+                    "note": "SMA Fail-safe" if fail_safe_triggered else ""
                 })
                 position = None
 
@@ -75,7 +94,7 @@ def run_backtest(prices):
             window = prices.iloc[i - DROP_LOOKBACK_BARS - 1:i - 1]
             max_close = window["close"].max()
             drop_pct = (signal_candle["close"] - max_close) / max_close * 100
-            sma10 = prices["close"].rolling(10).mean().iloc[i - 1]
+            sma10 = prices["sma10"].iloc[i - 1]
             trend_ok = signal_candle["close"] > sma10
 
             if drop_pct <= -DROP_PCT and trend_ok:
@@ -97,7 +116,8 @@ def run_backtest(prices):
             "buy_price": position["entry_price"],
             "sell_time": prices.iloc[-1].name,
             "sell_price": final_price,
-            "return_pct": (final_price - position["entry_price"]) / position["entry_price"] * 100
+            "return_pct": (final_price - position["entry_price"]) / position["entry_price"] * 100,
+            "note": "Final Exit"
         })
 
     return cash, trades
@@ -111,14 +131,12 @@ def plot_trades(prices, trades, ticker):
         plt.scatter(trade["buy_time"], trade["buy_price"], marker="^", color="green", label="Buy" if i == 0 else "", zorder=5)
         plt.scatter(trade["sell_time"], trade["sell_price"], marker="v", color="red", label="Sell" if i == 0 else "", zorder=5)
 
-    # Compute additional info
     returns = [t["return_pct"] for t in trades]
     total_return = sum(returns)
     win_count = sum(r > 0 for r in returns)
     win_rate = (win_count / len(returns) * 100) if trades else 0
     avg_return = np.mean(returns) if trades else 0
 
-    # Add dynamic subtitle text
     subtitle = (
         f"Total Trades: {len(trades)} | "
         f"Win Rate: {win_rate:.1f}% | "
@@ -135,11 +153,9 @@ def plot_trades(prices, trades, ticker):
     plt.show()
 
 
-
 def main():
     all_trades = []
     combined_final_value = 0
-    
 
     for TICKER in TICKERS:
         print(f"\n=== Running Backtest for {TICKER} ===")
@@ -160,8 +176,9 @@ def main():
                 buy_time_est = trade["buy_time"].astimezone(eastern).strftime("%Y-%m-%d %I:%M %p")
                 sell_time_est = trade["sell_time"].astimezone(eastern).strftime("%Y-%m-%d %I:%M %p")
                 print(f"{buy_time_est} BUY @ ${trade['buy_price']:.2f} → "
-                    f"{sell_time_est} SELL @ ${trade['sell_price']:.2f} | "
-                    f"Return: {trade['return_pct']:.2f}%")
+                      f"{sell_time_est} SELL @ ${trade['sell_price']:.2f} | "
+                      f"Return: {trade['return_pct']:.2f}% "
+                      f"{'| ' + trade['note'] if 'note' in trade and trade['note'] else ''}")
 
             # plot_trades(prices, trades, TICKER)
 
@@ -171,7 +188,7 @@ def main():
     print("\n=== TOTAL STRATEGY SUMMARY ===")
     total_trades = len(all_trades)
     duration_days = (END_DATE - START_DATE).days
-    duration_months = duration_days / 30.0  # Approximate
+    duration_months = duration_days / 30.0
 
     if total_trades > 0:
         returns = [t["return_pct"] for t in all_trades]
