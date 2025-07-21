@@ -1,5 +1,6 @@
 import os
-import pandas as pd
+import polars as pd
+# import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import pytz
@@ -12,6 +13,13 @@ import matplotlib.pyplot as plt
 #Initialize some variables
 eastern = pytz.timezone('US/Eastern')
 
+def is_market_hours(dt):
+    dt_local = dt.astimezone(eastern)
+    is_weekday = dt_local.weekday() < 5  # Monday–Friday
+    market_open = dt_local.replace(hour=9, minute=30, second=0, microsecond=0)
+    market_close = dt_local.replace(hour=16, minute=0, second=0, microsecond=0)
+    return is_weekday and market_open <= dt_local <= market_close
+
 # Load credentials
 load_dotenv()
 API_KEY = os.getenv("APCA_API_KEY_ID")
@@ -21,15 +29,16 @@ TICKERS = [ticker.strip() for ticker in os.getenv("TICKERS", "").split(",") if t
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Parameters
-STARTING_CASH = 21000
-POSITION_SIZE = 20000
-DROP_PCT = 3
-TAKE_PROFIT_PCT = 2
-STOP_LOSS_PCT = -.35
-HOLD_HOURS_MAX = 72
-DROP_LOOKBACK_BARS = 60
+STARTING_CASH = 1000
+POSITION_SIZE = 700
+DROP_PCT = 7
+TAKE_PROFIT_PCT = 4
+STOP_LOSS_PCT = -1.5
+HOLD_HOURS_MAX = 16
+DROP_LOOKBACK_BARS = 6000
+COOLDOWN_HOURS_AFTER_STOP = 4
 
-START_DATE = datetime(2025, 6, 30, tzinfo=pytz.UTC)
+START_DATE = datetime(2024, 7, 1, tzinfo=pytz.UTC)
 END_DATE = datetime(2025, 7, 1, tzinfo=pytz.UTC)
 
 def fetch_minute_data(symbol, start, end):
@@ -37,8 +46,7 @@ def fetch_minute_data(symbol, start, end):
         symbol_or_symbols=symbol,
         timeframe=TimeFrame.Minute,
         start=start,
-        end=end,
-        feed="sip"
+        end=end
     )
     bars = data_client.get_stock_bars(request).df
     return bars.xs(symbol, level=0)
@@ -46,12 +54,18 @@ def fetch_minute_data(symbol, start, end):
 def run_backtest(prices):
     cash = STARTING_CASH
     position = None
+    last_stop_loss_exit_time = None
     trades = []
 
     for i in range(DROP_LOOKBACK_BARS + 1, len(prices)):
         signal_candle = prices.iloc[i]  # simulate decision made based on previous candle
         now = prices.iloc[i]                # execution happens on this candle
         now_time = now.name
+
+        # Skip if not in market hours
+        if not is_market_hours(now_time):
+            continue    
+
         current_price = now["close"]         # simulate buy/sell at close of this minute
 
         if position:
@@ -59,7 +73,11 @@ def run_backtest(prices):
             time_held = (now_time - position["entry_time"]).total_seconds() / 3600
             return_pct = (current_price - entry_price) / entry_price * 100
 
-            if return_pct >= TAKE_PROFIT_PCT or return_pct <= STOP_LOSS_PCT or time_held >= HOLD_HOURS_MAX:
+            stop_loss_triggered = return_pct <= STOP_LOSS_PCT
+            take_profit_triggered = return_pct >= TAKE_PROFIT_PCT
+            time_exceeded = time_held >= HOLD_HOURS_MAX
+
+            if stop_loss_triggered or take_profit_triggered or time_exceeded:
                 shares = position["shares"]
                 cash += shares * current_price
                 trades.append({
@@ -69,6 +87,11 @@ def run_backtest(prices):
                     "sell_price": current_price,
                     "return_pct": return_pct
                 })
+
+                # record stop loss exit time
+                if stop_loss_triggered:
+                    last_stop_loss_exit_time = now_time
+
                 position = None
 
         else:
@@ -77,6 +100,12 @@ def run_backtest(prices):
             drop_pct = (signal_candle["close"] - max_high) / max_high * 100
             sma10 = prices["close"].rolling(10).mean().iloc[i - 1]
             trend_ok = signal_candle["close"] > sma10
+
+            # Check cooldown
+            if last_stop_loss_exit_time:
+                cooldown_elapsed = (now_time - last_stop_loss_exit_time).total_seconds() / 3600
+                if cooldown_elapsed < COOLDOWN_HOURS_AFTER_STOP:
+                    continue  # Skip entry, still in cooldown
 
             if drop_pct <= -DROP_PCT and trend_ok:
                 shares_to_buy = POSITION_SIZE / current_price

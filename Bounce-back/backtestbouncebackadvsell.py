@@ -21,17 +21,31 @@ TICKERS = [ticker.strip() for ticker in os.getenv("TICKERS", "").split(",") if t
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
 # Parameters
-STARTING_CASH = 21000
-POSITION_SIZE = 20000
-DROP_PCT = 3
-TAKE_PROFIT_PCT = 2.5
-STOP_LOSS_PCT = -0.35
-TRAILING_STOP_LOSS_PCT = -1
-HOLD_HOURS_MAX = 72
-DROP_LOOKBACK_BARS = 60
+# Parameters tuned for $SSO
+STARTING_CASH = 1100
+POSITION_SIZE = 800
+DROP_PCT = 1.7                   # SSO moves quicker — a smaller drop captures the rebound
+TAKE_PROFIT_PCT = 6              # 6% target is reasonable for intraday to short swing
+STOP_LOSS_PCT = -1.5             # Allow some downside before cutting
+TRAILING_STOP_LOSS_PCT = -1.8    # Protect profits once peaked
+HOLD_HOURS_MAX = 48              # Close trade within 2 days max
+DROP_LOOKBACK_BARS = 200         # Shorter lookback to react to recent peak
+COOLDOWN_MINUTES = 60            # Cooldown after a failed trade to prevent overtrading
 
-START_DATE = datetime(2025, 6, 26, tzinfo=pytz.UTC)
-END_DATE = datetime(2025, 6, 27, tzinfo=pytz.UTC)
+
+START_DATE = datetime(2025, 5, 1, tzinfo=pytz.UTC)
+END_DATE = datetime(2025, 7, 1, tzinfo=pytz.UTC)
+
+MARKET_OPEN_HOUR = 9
+MARKET_OPEN_MINUTE = 30
+MARKET_CLOSE_HOUR = 16
+MARKET_CLOSE_MINUTE = 0
+
+def is_during_market_hours(dt):
+    dt_est = dt.astimezone(eastern)
+    market_open = dt_est.replace(hour=MARKET_OPEN_HOUR, minute=MARKET_OPEN_MINUTE, second=0, microsecond=0)
+    market_close = dt_est.replace(hour=MARKET_CLOSE_HOUR, minute=MARKET_CLOSE_MINUTE, second=0, microsecond=0)
+    return market_open <= dt_est <= market_close and dt_est.weekday() < 5
 
 def fetch_minute_data(symbol, start, end):
     request = StockBarsRequest(
@@ -48,11 +62,16 @@ def run_backtest(prices):
     cash = STARTING_CASH
     position = None
     trades = []
+    cooldown_end_time = None
 
     for i in range(DROP_LOOKBACK_BARS + 1, len(prices)):
         signal_candle = prices.iloc[i]
         now = prices.iloc[i]
         now_time = now.name
+
+        if not is_during_market_hours(now_time):
+            continue
+
         current_price = now["close"]
 
         if position:
@@ -82,14 +101,24 @@ def run_backtest(prices):
                 })
                 position = None
 
+                if return_pct <= STOP_LOSS_PCT:
+                    cooldown_end_time = now_time + timedelta(minutes=COOLDOWN_MINUTES)
+
         else:
+            if cooldown_end_time and now_time < cooldown_end_time:
+                continue
+
             window = prices.iloc[i - DROP_LOOKBACK_BARS - 1:i - 1]
             max_high = window["high"].max()
             drop_pct = (signal_candle["close"] - max_high) / max_high * 100
             sma10 = prices["close"].rolling(10).mean().iloc[i - 1]
-            trend_ok = signal_candle["close"] > sma10
+            sma20 = prices["close"].rolling(20).mean().iloc[i - 1]
+            trend_ok = signal_candle["close"] > sma10 and sma10 > sma20
 
-            if drop_pct <= -DROP_PCT and trend_ok:
+            prev_candle = prices.iloc[i - 1]
+            bounce_ok = signal_candle["close"] > prev_candle["close"]
+
+            if drop_pct <= -DROP_PCT and trend_ok and bounce_ok:
                 shares_to_buy = POSITION_SIZE / current_price
                 if cash >= shares_to_buy * current_price:
                     cash -= shares_to_buy * current_price
@@ -113,6 +142,9 @@ def run_backtest(prices):
         })
 
     return cash, trades
+
+# The rest of the code (plot_trades, main, etc.) stays unchanged
+
 
 def plot_trades(prices, trades, ticker):
     plt.figure(figsize=(14, 6))

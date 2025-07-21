@@ -18,11 +18,11 @@ load_dotenv()
 API_KEY = os.getenv("APCA_API_KEY_ID")
 SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
 TICKERS = [ticker.strip() for ticker in os.getenv("TICKERS", "").split(",") if ticker.strip()]
-DROP_PCT = 3
-TAKE_PROFIT_PCT = 2
+DROP_PCT = 2.5
+TAKE_PROFIT_PCT = 2.5
 STOP_LOSS_PCT = -0.35
 HOLD_HOURS_MAX = 72
-DROP_LOOKBACK_BARS = 60
+DROP_LOOKBACK_BARS = 600
 ROLLING_WINDOW_SIZE = DROP_LOOKBACK_BARS + 10
 POSITION_SIZE = 20000
 

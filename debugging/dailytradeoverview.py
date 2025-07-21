@@ -13,16 +13,25 @@ API_KEY = os.getenv("APCA_API_KEY_ID")
 SECRET_KEY = os.getenv("APCA_API_SECRET_KEY")
 trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
 
-# === TIME CONFIG ===
-eastern = pytz.timezone('US/Eastern')
-now = datetime.now(eastern)
-start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(pytz.UTC)
+# === SET TARGET DATE HERE ===
+TARGET_DATE = '2025-07-03'  
 
-# === FETCH TODAY'S TRADES ===
-def fetch_todays_trades():
+# === FETCH TRADES FOR SPECIFIC DATE ===
+def fetch_trades_by_date(target_date_str):
+    eastern = pytz.timezone('US/Eastern')
+    try:
+        target_date = datetime.strptime(target_date_str, '%Y-%m-%d')
+    except ValueError:
+        print("Invalid date format. Please use YYYY-MM-DD.")
+        return pd.DataFrame()
+
+    start_time = eastern.localize(datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0)).astimezone(pytz.UTC)
+    end_time = start_time + timedelta(days=1)
+
     order_filter = GetOrdersRequest(
         status=QueryOrderStatus.CLOSED,
-        after=start_of_day
+        after=start_time,
+        until=end_time
     )
 
     all_orders = trading_client.get_orders(order_filter)
@@ -35,15 +44,15 @@ def fetch_todays_trades():
                 "side": order.side,
                 "qty": float(order.filled_qty),
                 "price": float(order.filled_avg_price),
-                "time": order.filled_at
+                "time": order.filled_at.astimezone(eastern).strftime('%Y-%m-%d %H:%M:%S')
             })
 
     return pd.DataFrame(trades)
 
 # === ANALYZE TRADES ===
-def analyze_trades(trades_df):
+def analyze_trades(trades_df, target_date_str):
     if trades_df.empty:
-        print("No trades found for today.")
+        print(f"No trades found for {target_date_str}.")
         return
 
     summary = []
@@ -88,12 +97,12 @@ def analyze_trades(trades_df):
     summary_df = pd.DataFrame(summary)
     pd.set_option('display.max_columns', None)
 
-    print("\n=== Today's Trade Summary ===")
+    print(f"\n=== Trade Summary for {target_date_str} ===")
     print(summary_df.to_string(index=False))
 
 def main():
-    trades_df = fetch_todays_trades()
-    analyze_trades(trades_df)
+    trades_df = fetch_trades_by_date(TARGET_DATE)
+    analyze_trades(trades_df, TARGET_DATE)
 
 if __name__ == "__main__":
     main()
